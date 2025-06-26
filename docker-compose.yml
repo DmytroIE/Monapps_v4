@@ -1,0 +1,170 @@
+x-variables: &variables
+  ENV_STAGE: local
+  INSTANCE_ID: monapps_dev
+  MQTT_BROKER_HOST: mosquitto
+
+services:
+  monapps:
+    build:
+      context: .
+      dockerfile: docker/dev/monapps/Dockerfile
+    container_name: monapps-main
+    restart: unless-stopped
+    volumes:
+      - ./monapps/:/usr/src/monapps/
+      - postgres_socket:/postgres_socket
+    ports:
+      - "5000:8000"
+    environment:
+      <<: *variables
+      MONAPP_PROC_NAME: main
+    env_file:
+      - docker/dev/env/.env
+      - docker/dev/env/.db.env
+    depends_on: [db, redis, mosquitto]
+    networks:
+      - inner_network
+      - outer_network
+    # healthcheck:
+    #   test: curl --fail -s http://localhost:8000$$HEALTH_CHECK_URL || exit 1
+    #   interval: 1m30s
+    #   timeout: 3s
+    #   retries: 3
+
+  monapps-sub:
+    build:
+      context: .
+      dockerfile: docker/dev/monapps/Dockerfile
+    container_name: monapps-sub
+    restart: unless-stopped
+    volumes:
+      - ./monapps/:/usr/src/monapps/
+      - postgres_socket:/postgres_socket
+    environment:
+      <<: *variables
+      MONAPP_PROC_NAME: sub
+      MQTT_SUB_TOPIC: "rawdata/#"
+    env_file:
+      - docker/dev/env/.env
+      - docker/dev/env/.db.env
+    depends_on: [db, redis, mosquitto, monapps]
+    networks:
+      - inner_network
+    entrypoint: "" # to avoid "migrate"
+    command: ["python", "manage.py", "run_mqtt_sub"]
+
+  monapps-beat:
+    build:
+      context: .
+      dockerfile: docker/dev/monapps/Dockerfile
+    container_name: monapps-beat
+    restart: unless-stopped
+    volumes:
+      - ./monapps/:/usr/src/monapps/
+      - postgres_socket:/postgres_socket
+    environment:
+      <<: *variables
+    env_file:
+      - docker/dev/env/.env
+      - docker/dev/env/.db.env
+    depends_on: [db, redis, mosquitto, monapps]
+    networks:
+      - inner_network
+    entrypoint: "" # to avoid "migrate"
+    command: ["python", "-m", "celery", "-A", "monapps", "beat", "-l", "info", "-S", "django"]
+
+  monapps-upd:
+    build:
+      context: .
+      dockerfile: docker/dev/monapps/Dockerfile
+    container_name: monapps-upd
+    restart: unless-stopped
+    volumes:
+      - ./monapps/:/usr/src/monapps/
+      - postgres_socket:/postgres_socket
+    environment:
+      <<: *variables
+      MONAPP_PROC_NAME: upd
+    env_file:
+      - docker/dev/env/.env
+      - docker/dev/env/.db.env
+    depends_on: [db, redis, mosquitto, monapps, monapps-beat]
+    networks:
+      - inner_network
+    entrypoint: "" # to avoid "migrate"
+    command: ["python", "-m", "celery", "-A", "monapps", "worker", "-Q", "update", "-E", "-l", "info", "--pool", "threads"]
+
+  monapps-eval:
+    build:
+      context: .
+      dockerfile: docker/dev/monapps/Dockerfile
+    container_name: monapps-eval
+    restart: unless-stopped
+    volumes:
+      - ./monapps/:/usr/src/monapps/
+      - postgres_socket:/postgres_socket
+    environment:
+      <<: *variables
+      MONAPP_PROC_NAME: eval
+    env_file:
+      - docker/dev/env/.env
+      - docker/dev/env/.db.env
+    depends_on: [db, redis, mosquitto, monapps, monapps-beat]
+    networks:
+      - inner_network
+    entrypoint: "" # to avoid "migrate"
+    command: ["python", "-m", "celery", "-A", "monapps", "worker", "-Q", "evaluate", "-E", "-l", "info", "--pool", "threads"]
+
+  db:
+    image:  timescale/timescaledb:2.20.3-pg16
+    container_name: timescaledb
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+      - postgres_socket:/var/run/postgresql/
+    env_file:
+      - docker/dev/env/.db.env
+    networks:
+      - inner_network
+    # healthcheck:
+    #   test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER" ]
+    #   interval: 50s
+    #   timeout: 5s
+    #   retries: 5
+
+  redis:
+    image: redis:8.0.2-alpine
+    container_name: redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - inner_network
+    # healthcheck:
+    #   test: [ "CMD", "redis-cli","ping" ]
+    #   interval: 1m20s
+    #   timeout: 5s
+    #   retries: 3
+
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1884:1883"
+      - "8084:8083"
+    volumes: 
+      - ./docker/mosquitto/config/:/mosquitto/config/
+    networks:
+      - inner_network
+      - outer_network
+
+volumes:
+  postgres_data:
+  postgres_socket:
+  redis_data:
+
+networks:
+  inner_network:
+  outer_network:
