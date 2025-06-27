@@ -4,6 +4,7 @@ from django.conf import settings
 from apps.assets.models import Asset
 from utils.ts_utils import create_now_ts_ms
 from utils.update_utils import update_func_by_property_map, enqueue_update, update_reeval_fields, set_attr_if_cond
+from utils.db_field_utils import get_instance_full_id, get_parent_full_id
 
 
 class AssetUpdater:
@@ -24,27 +25,61 @@ class AssetUpdater:
             .prefetch_related("devices")
             .select_for_update()[: settings.MAX_ASSETS_TO_UPD]
         )
+
+        asset_map = {}
         for asset in asset_qs:
-            print(f"\n!!!!!!!{self.now_ts=}\nUpdating asset {asset.name}, reeval fields: {asset.reeval_fields}")
-            self.update_asset(asset)
+            asset_full_id = get_instance_full_id(asset)
+            if asset_full_id not in asset_map:
+                asset_map[asset_full_id] = asset
 
-        for parent in self.parent_map.values():
-            parent.save(update_fields=parent.update_fields)
+        print(f"---asset_and_parent_map: {asset_map}")
 
-    def update_asset(self, asset):
-        if len(asset.reeval_fields) == 0:
-            return
+        tree = self.create_asset_tree(asset_map)
+        print(f"---tree: {tree}")
+        self.procees_starting_from_leaves(tree)
 
-        parent = asset.parent
-        if parent is not None:
-            # FIXME: should this code be used
-            if parent.name not in self.parent_map:
-                self.parent_map[parent.name] = parent
-            # or this?
-            # Doesn't the latter replace the parent
-            # (so resets 'update_fields' and 'reeval_fields')?
-            # self.parent_map[parent.name] = parent
+    def create_asset_tree(self, asset_map):
+        tree = []
+        print("---create tree")
+        for asset in asset_map.values():
+            print(f"---asset: {asset}")
+            if asset.parent is not None:
+                print("Parent is not None")
+                if get_instance_full_id(asset.parent) not in asset_map:
+                    # for 'root' assets (that are not in the map) update will not happen in this iteration, but will be enqueued
+                    asset.parent.root = True
+                    tree.append(asset.parent)
+                    print(f"---parent {asset.parent} added to the tree")
 
+                asset.root = False
+                if hasattr(asset.parent, "children"):
+                    asset.parent.children.append(asset)
+                else:
+                    asset.parent.children = [asset]
+
+                print(f"---asset {asset} added as children to the tree")
+            else:
+                asset.root = False
+                tree.append(asset)
+                print(f"---asset {asset} added to the tree")
+
+        return tree
+
+    def procees_starting_from_leaves(self, nodes):
+        for node in nodes:
+            if hasattr(node, "children") and len(node.children) > 0:
+                self.procees_starting_from_leaves(node.children)
+            if node.root:
+                self.update_root_node(node)
+            else:
+                self.update_node(node)
+
+    def update_root_node(self, asset):
+        if "reeval_fields" in asset.update_fields:
+            enqueue_update(asset, self.now_ts)
+            asset.save(update_fields=asset.update_fields)
+
+    def update_node(self, asset):
         children = [
             *asset.applications.all(),
             *asset.devices.all(),
@@ -52,7 +87,7 @@ class AssetUpdater:
         ]
 
         for field_name in asset.reeval_fields:
-            self.update_asset_field(asset, parent, field_name, children)
+            self.update_asset_field(asset, field_name, children)
 
         asset.reeval_fields = []  # reset
         asset.update_fields.add("reeval_fields")
@@ -62,7 +97,7 @@ class AssetUpdater:
 
         asset.save(update_fields=asset.update_fields)
 
-    def update_asset_field(self, asset, parent, field_name, children):
+    def update_asset_field(self, asset, field_name, children):
         func = update_func_by_property_map[field_name]
         new_value = func(children)
 
@@ -76,8 +111,4 @@ class AssetUpdater:
             asset.last_curr_state_update_ts = self.now_ts
             asset.update_fields.add("last_curr_state_update_ts")
 
-        enqueue_update(parent, self.now_ts)
-        update_reeval_fields(parent, field_name)
-
-        if parent is not None:
-            print(f"\n!!!!!{self.now_ts=}\nEnqueued parent update {parent.name} with {parent.reeval_fields}, {parent.next_upd_ts}\n")
+        update_reeval_fields(asset.parent, field_name)

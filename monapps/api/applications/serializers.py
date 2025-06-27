@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.applications.models import Application
-from utils.db_field_utils import get_parent_id, get_instance_full_id
+from utils.db_field_utils import get_parent_full_id, get_instance_full_id
 
 
 class AppSerializer(serializers.ModelSerializer):
@@ -13,7 +13,7 @@ class AppSerializer(serializers.ModelSerializer):
         return get_instance_full_id(instance)
 
     def get_parentId(self, instance):
-        return get_parent_id(instance)
+        return get_parent_full_id(instance)
 
     timeResample = serializers.IntegerField(source="time_resample")
     cursorTs = serializers.IntegerField(source="cursor_ts")

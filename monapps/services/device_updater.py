@@ -37,13 +37,8 @@ class DeviceUpdater:
     def update_device(self, dev):
         parent = dev.parent
         if parent is not None:
-            # FIXME: should this code be used
             if parent.name not in self.parent_map:
                 self.parent_map[parent.name] = parent
-            # or this?
-            # Doesn't the latter replace the parent
-            # (so resets 'update_fields' and 'reeval_fields')?
-            # self.parent_map[parent.name] = parent
 
         children = list(dev.datastreams.filter(is_enabled=True))
 
@@ -63,5 +58,5 @@ class DeviceUpdater:
         if not set_attr_if_cond(health, "!=", dev, "health"):
             return
 
-        enqueue_update(parent, self.now_ts)
-        update_reeval_fields(parent, "health")
+        if update_reeval_fields(parent, "health"):
+            enqueue_update(parent, self.now_ts)

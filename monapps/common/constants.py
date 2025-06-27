@@ -150,3 +150,6 @@ class MeasUnits(models.TextChoices):
     M3_H = "m3/h"
     M3_S = "m3/s"
     USM_CM = "uSm/cm"
+
+
+reeval_fields = {"status", "curr_state", "health"}

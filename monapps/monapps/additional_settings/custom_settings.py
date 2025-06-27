@@ -7,11 +7,13 @@ MIN_TIME_APP_FUNC_INVOC_MS = 60000
 # DS health monitoring settings
 MAX_DS_TO_HEALTH_PROC = 100
 TIME_DS_HEALTH_EVAL_MS = 5000  # 5 seconds, how often the ds health check procedure is executed
-NEXT_EVAL_MARGIN_COEF = 1.5  # will be a multiplicator for time_update for periodic datastreams
+NEXT_EVAL_MARGIN_COEF = 1.5  # will be a multiplicator for 'time_update' for periodic datastreams
 
-# Asset/Site update settings
-TIME_ASSET_UPD_MS = 5000  # 5 seconds, how often the asset update procedure is executed
-MAX_SITES_TO_UPD = 10
+# Asset/Device update settings
+# 5 seconds, how often the asset/device update procedure is executed,
+# should match the interval duration
+TIME_ASSET_UPD_MS = 5000
+
 MAX_ASSETS_TO_UPD = 100
 MAX_DEVICES_TO_UPD = 50
 

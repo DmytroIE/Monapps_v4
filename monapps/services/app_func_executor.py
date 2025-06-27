@@ -6,8 +6,8 @@ from django_celery_beat.models import PeriodicTask
 
 from apps.applications.models import Application
 from apps.dfreadings.models import DfReading
-from common.constants import HealthGrades, STATUS_FIELD_NAME, CURR_STATE_FIELD_NAME
-from common.complex_types import reeval_fields, AppFunction
+from common.constants import HealthGrades, STATUS_FIELD_NAME, CURR_STATE_FIELD_NAME, reeval_fields
+from common.complex_types import AppFunction
 from utils.ts_utils import create_now_ts_ms
 from utils.sequnce_utils import find_instance_with_max_attr
 from utils.alarm_utils import update_alarm_map
@@ -175,7 +175,7 @@ class AppFuncExecutor:
         if parent is None:
             return
 
-        parent_reeval_fields = app_update_fields.intersection(reeval_fields)
+        parent_reeval_fields = reeval_fields.intersection(app_update_fields)
         if "is_status_stale" in app_update_fields:
             parent_reeval_fields.add("status")
         if "is_curr_state_stale" in app_update_fields:
@@ -183,7 +183,8 @@ class AppFuncExecutor:
         if len(parent_reeval_fields) == 0:
             return
 
-        enqueue_update(parent, self.now_ts)
-        update_reeval_fields(parent, parent_reeval_fields)
+        if update_reeval_fields(parent, parent_reeval_fields):
+            enqueue_update(parent, self.now_ts)
 
+        # parent will not be saved if 'parent.update_fields' is empty
         parent.save(update_fields=parent.update_fields)

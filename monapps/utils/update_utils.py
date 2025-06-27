@@ -1,10 +1,7 @@
 from typing import Any
 from collections.abc import Iterable
 from django.conf import settings
-from apps.assets.models import Asset
-from apps.devices.models import Device
 from common.constants import StatusTypes, CurrStateTypes, StatusUse, CurrStateUse, HealthGrades
-from common.complex_types import ReevalFields
 
 
 def derive_health_from_children(children_objects: Iterable[Any]) -> HealthGrades:
@@ -163,36 +160,44 @@ update_func_by_property_map = {
 }
 
 
-def enqueue_update(asset_lnk: Asset | Device | None, now_ts: int):
+def enqueue_update(asset_lnk, now_ts: int) -> bool:
     """
     Adjusts the next update time of the asset.
 
-    :param asset_lnk: asset instance (will be changed in-place)
+    :param asset_lnk: device/asset instance (will be changed in-place)
     :param now_ts: the timestamp of the moment when the enqueuement is called
     """
+    changed = False
     if asset_lnk is None:
-        return
+        return changed
 
     if asset_lnk.next_upd_ts > now_ts + settings.TIME_ASSET_UPD_MS:
         asset_lnk.next_upd_ts = now_ts + settings.TIME_ASSET_UPD_MS
         asset_lnk.update_fields.add("next_upd_ts")
+        changed = True
+
+    return changed
 
 
-def update_reeval_fields(asset_lnk: Asset | None, fields: ReevalFields | Iterable[ReevalFields]):
+def update_reeval_fields(asset_lnk, fields: str | Iterable[str]) -> bool:
     """
     Updates the 'reeval_fields' property.
 
-    :param asset_lnk: asset instance (will be changed in-place)
-    :param fields: a list of fields changed in the child asset and needed to be reevaluated in the parent
+    :param asset_lnk: the parent asset instance (will be changed in-place)
+    :param fields: a field / list of fields changed in the child asset that may need to be reevaluated in the parent
     """
-    if asset_lnk is None:
-        return
+    changed = False
+    if asset_lnk is None or not hasattr(asset_lnk, "reeval_fields"):
+        return changed
     if isinstance(fields, str):
         fields = [fields]
     for field in fields:
         if field not in asset_lnk.reeval_fields:
             asset_lnk.reeval_fields.append(field)
             asset_lnk.update_fields.add("reeval_fields")  # for the 'save' function
+            changed = True
+
+    return changed
 
 
 def set_attr_if_cond(new_value, cond, instance, field_name):

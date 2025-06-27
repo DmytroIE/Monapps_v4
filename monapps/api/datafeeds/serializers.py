@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.datafeeds.models import Datafeed
-from utils.db_field_utils import get_parent_id, get_instance_full_id
+from utils.db_field_utils import get_parent_full_id, get_instance_full_id
 
 
 class DfSerializer(serializers.ModelSerializer):
@@ -18,7 +18,7 @@ class DfSerializer(serializers.ModelSerializer):
         return get_instance_full_id(instance)
 
     def get_parentId(self, instance):
-        return get_parent_id(instance)
+        return get_parent_full_id(instance)
 
     def get_dataTypeName(self, instance):
         return instance.data_type.name

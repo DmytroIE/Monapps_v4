@@ -28,7 +28,6 @@ INSTALLED_APPS = [
     "django_celery_beat",
     "rest_framework",
     "corsheaders",
-    # "treebeard",
     "apps.datatypes",
     "apps.applications",
     "apps.assets",
@@ -37,7 +36,6 @@ INSTALLED_APPS = [
     "apps.devices",
     "apps.dfreadings",
     "apps.dsreadings",
-    # "apps.nodes",
     "apps.mqtt_sub",
 ]
 

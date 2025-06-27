@@ -22,13 +22,13 @@ def exec_app_func(self) -> None:
     if (app_func := discover_app_func(app)) is None:
         return
 
-    logger.info("Start 'new df readings' procedure")
+    logger.info(f"App {app.id} Start 'new df readings' procedure")
     NewDfrCreator(app).execute()
-    logger.info("'New df readings' procedure finished")
+    logger.info(f"App {app.id} 'New df readings' procedure finished")
 
-    logger.info("Run 'app function' routine")
+    logger.info(f"App {app.id}Run 'app function' routine")
     AppFuncExecutor(app, app_func, task).execute()
-    logger.info("'App function' routine finished")
+    logger.info(f"App {app.id} 'app function' routine finished")
 
 
 def discover_task(ctx) -> Optional[PeriodicTask]:
