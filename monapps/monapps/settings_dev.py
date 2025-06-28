@@ -10,9 +10,20 @@ LOGGING = {
             "class": "logging.StreamHandler",
             "formatter": "simple",
         },
+        "file": {
+            "class": "logging.FileHandler",
+            "filename": "log.log",
+            "formatter": "simple",
+        },
     },
     "formatters": {
         "simple": {"format": "|%(levelname)s|\t|%(asctime)s|\t|%(module)s|\t'%(message)s'"},
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["file"],
+            "level": "WARNING",
+        },
     },
     "root": {
         "handlers": ["console"],

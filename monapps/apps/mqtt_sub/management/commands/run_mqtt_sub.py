@@ -60,8 +60,6 @@ def on_message(client, userdata, msg):
     logger.info(f"A message on the topic '{msg.topic}' received: '{msg_str_cropped}'")
     try:
         payload = json.loads(msg_str)
-        if type(payload) is not dict:  # TODO: provide validation with pydantic
-            raise ValueError("Payload is not a dictionary")
 
         for dev_ui, dev_payload in payload.items():
             if type(dev_payload) is not dict:
@@ -69,7 +67,7 @@ def on_message(client, userdata, msg):
                     "WARNING", f"Incorrect payload for device '{dev_ui}'", create_now_ts_ms(), instance="MQTT Sub"
                 )
                 continue
-            # put_raw_data_in_db(dev_ui, dev_payload)
+            dev_ui = dev_ui.lower()  # unify all 'dev_ui's stored in the db
             RawDataProcessor(dev_ui, dev_payload).execute()
 
     except Exception as e:

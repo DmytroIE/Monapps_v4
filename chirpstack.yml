@@ -1,0 +1,67 @@
+services:
+  chirpstack:
+    image: chirpstack/chirpstack:4
+    command: -c /etc/chirpstack
+    restart: unless-stopped
+    volumes:
+      - ./docker/chirpstack/chirpstack:/etc/chirpstack
+    depends_on:
+      - chirpstack-postgres
+      - chirpstack-redis
+    environment:
+      - MQTT_BROKER_HOST=mosquitto
+      - REDIS_HOST=chirpstack-redis
+      - POSTGRESQL_HOST=chirpstack-postgres
+    ports:
+      - "8080:8080"
+    networks:
+      - chirpstack_network
+      - mosquitto_network
+
+  chirpstack-gateway-bridge:
+    image: chirpstack/chirpstack-gateway-bridge:4
+    restart: unless-stopped
+    ports:
+      - "1700:1700/udp"
+    volumes:
+      - ./docker/chirpstack/chirpstack-gateway-bridge:/etc/chirpstack-gateway-bridge
+    environment:
+      - INTEGRATION__MQTT__EVENT_TOPIC_TEMPLATE=eu868/gateway/{{ .GatewayID }}/event/{{ .EventType }}
+      - INTEGRATION__MQTT__STATE_TOPIC_TEMPLATE=eu868/gateway/{{ .GatewayID }}/state/{{ .StateType }}
+      - INTEGRATION__MQTT__COMMAND_TOPIC_TEMPLATE=eu868/gateway/{{ .GatewayID }}/command/#
+    networks:
+      - chirpstack_network
+      - mosquitto_network
+  
+  chirpstack-postgres:
+    image: postgres:14-alpine
+    restart: unless-stopped
+    volumes:
+      - ./docker/chirpstack/postgresql/initdb:/docker-entrypoint-initdb.d
+      - cs_postgresql_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=chirpstack
+      - POSTGRES_PASSWORD=chirpstack
+      - POSTGRES_DB=chirpstack
+    networks:
+      - chirpstack_network
+
+  chirpstack-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 300 1 --save 60 100 --appendonly no
+    volumes:
+      - cs_redis_data:/data
+    networks:
+      - chirpstack_network
+
+volumes:
+  cs_postgresql_data:
+  cs_redis_data:
+
+networks:
+  chirpstack_network:
+    driver: bridge
+  mosquitto_network:
+    name: mosquitto_network
+    external: true
