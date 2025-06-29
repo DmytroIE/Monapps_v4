@@ -22,7 +22,6 @@ class AppFuncExecutor:
         self.app = app
         self.task = task
         self.app_func = app_func
-        self.now_ts = create_now_ts_ms()
         self.update_map = {}
         self.excep_health = HealthGrades.UNDEFINED
         self.health_from_app = HealthGrades.UNDEFINED
@@ -34,16 +33,17 @@ class AppFuncExecutor:
         self.task = PeriodicTask.objects.select_for_update().get(pk=self.task.pk)
         if self.app.is_enabled:
             try:
-                logger.info(f"Starting app function, {self.app}")
+                logger.debug("Starting app function")
                 self.run_exec_routine()
-                logger.info(f"App function was executed, {self.app}")
+                logger.debug("App function was executed")
             except IntegrityError:
                 logger.error("An attempt to rewrite existing df readings detected")
                 self.excep_health = HealthGrades.ERROR
             except Exception as e:
                 self.excep_health = HealthGrades.ERROR
                 logger.error(f"Error happened while executing app function, {e}")
-        self.now_ts = create_now_ts_ms()  # update 'now_ts' as app func execution can take much time
+
+        logger.debug("Update other parameters")
         self.run_post_exec_routine()
 
     @transaction.atomic  # lock datafeeds
@@ -75,12 +75,14 @@ class AppFuncExecutor:
         latest_dfr = find_instance_with_max_attr(new_df_readings)
         if latest_dfr is not None:  # the same as 'if len(new_df_readings) > 0'
             DfReading.objects.bulk_create(new_df_readings)
+        logger.debug("New df readings were saved")
         return latest_dfr
 
     def update_datafeed(self, df, latest_dfr):
         max_rts = latest_dfr.time
         if set_attr_if_cond(max_rts, ">", df, "last_reading_ts"):
             df.save(update_fields=df.update_fields)
+            logger.debug(f"Datafeed '{df.name}' was updated")
 
     def assign_new_cs_st_value(self, latest_dfr, name: Literal["status", "curr_state"]):
         if not set_attr_if_cond(latest_dfr.time, ">", self.app, f"last_{name}_update_ts"):
@@ -88,26 +90,31 @@ class AppFuncExecutor:
         if not set_attr_if_cond(latest_dfr.value, "!=", self.app, name):
             return
         full_name = "Current state" if name == "curr_state" else "Status"
-        add_to_alarm_log("INFO", f"{full_name} changed", latest_dfr.time, instance=self.app)
+        add_to_alarm_log("INFO", f"{full_name} changed", instance=self.app)
+        logger.debug(f"{full_name} changed -> : {latest_dfr.value}")
 
     def update_catching_up(self):
         if (is_catching_up := self.update_map.get("is_catching_up")) is None:
             return
 
-        set_attr_if_cond(is_catching_up, "!=", self.app, "is_catching_up")
+        if not set_attr_if_cond(is_catching_up, "!=", self.app, "is_catching_up"):
+            return
 
         if is_catching_up and not self.app.is_catching_up:
             self.task.interval = self.app.catch_up_interval
             self.task.save()
+            logger.debug("Catching up started")
         elif not is_catching_up and self.app.is_catching_up:
             self.task.interval = self.app.invoc_interval
             self.task.save()
+            logger.debug("Catching up finished")
 
     def update_cursor_pos(self):
         if (ts := self.update_map.get("cursor_ts")) is None:
             return
         cursor_ts = ts
-        set_attr_if_cond(cursor_ts, ">", self.app, "cursor_ts")
+        if set_attr_if_cond(cursor_ts, ">", self.app, "cursor_ts"):
+            logger.debug(f"Cursor position was updated -> {cursor_ts}")
 
     def update_alarms(self):
         if (alarm_payload := self.update_map.get("alarm_payload")) is None:
@@ -124,7 +131,7 @@ class AppFuncExecutor:
             app_infos_for_ts = row.get("i")
             if app_infos_for_ts is not None and isinstance(app_infos_for_ts, Iterable):
                 for info_str in app_infos_for_ts:
-                    add_to_alarm_log("INFO", info_str, ts, self.app)
+                    add_to_alarm_log("INFO", info_str, ts=ts, instance=self.app)
 
     def run_post_exec_routine(self):
         self.update_staleness("status")
@@ -140,15 +147,17 @@ class AppFuncExecutor:
             return
         last_update_ts = getattr(self.app, f"last_{name}_update_ts")
         time_stale = getattr(self.app, f"time_{name}_stale")
+        now_ts = create_now_ts_ms()
         if last_update_ts is not None:
-            is_stale = self.now_ts - last_update_ts > time_stale
+            is_stale = now_ts - last_update_ts > time_stale
         else:
-            is_stale = self.now_ts - self.app.created_ts > time_stale
+            is_stale = now_ts - self.app.created_ts > time_stale
 
         if set_attr_if_cond(is_stale, "!=", self.app, f"is_{name}_stale"):
             if is_stale:
                 full_name = "Current state" if name == "curr_state" else "Status"
-                add_to_alarm_log("INFO", f"{full_name} is stale", self.now_ts, instance=self.app)
+                # add_to_alarm_log("INFO", f"{full_name} is stale", instance=self.app)
+                logger.debug(f"{full_name} became stale")
 
     def eval_health_from_app(self):
         if (h := self.update_map.get("health")) is not None:
@@ -157,8 +166,9 @@ class AppFuncExecutor:
 
     def eval_cs_health(self):
         # health based on the cursor timestamp
+        now_ts = create_now_ts_ms()
         if self.app.is_enabled and not self.app.is_catching_up:
-            if self.now_ts - self.app.cursor_ts > self.app.time_health_error:
+            if now_ts - self.app.cursor_ts > self.app.time_health_error:
                 self.cs_health = HealthGrades.ERROR
             else:
                 self.cs_health = HealthGrades.OK
@@ -168,7 +178,8 @@ class AppFuncExecutor:
         self.eval_cs_health()
         health = max(self.cs_health, self.health_from_app, self.excep_health)
         if set_attr_if_cond(health, "!=", self.app, "health"):
-            add_to_alarm_log("INFO", "Health changed", self.now_ts, instance=self.app)
+            # add_to_alarm_log("INFO", "Health changed", instance=self.app)
+            logger.debug(f"Health changed -> {health}")
 
     def update_parent(self, app_update_fields):
         parent = self.app.parent
@@ -183,8 +194,12 @@ class AppFuncExecutor:
         if len(parent_reeval_fields) == 0:
             return
 
-        if update_reeval_fields(parent, parent_reeval_fields):
-            enqueue_update(parent, self.now_ts)
+        now_ts = create_now_ts_ms()
+        update_reeval_fields(parent, parent_reeval_fields)
+        if len(parent.reeval_fields) == 0:
+            return
+        logger.debug(f"To be reevaluated: {parent.reeval_fields}")
+        enqueue_update(parent, now_ts, coef=0.2)
+        logger.debug(f"Parent update enqueued for {parent.next_upd_ts}")
 
-        # parent will not be saved if 'parent.update_fields' is empty
         parent.save(update_fields=parent.update_fields)

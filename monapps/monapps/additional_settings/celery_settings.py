@@ -48,3 +48,8 @@ CELERY_TASK_DEFAULT_ROUTING_KEY = "default"
 
 CELERY_IMPORTS = ("tasks",)
 CELERY_IGNORE_RESULT = True
+
+# https://docs.celeryq.dev/en/stable/userguide/configuration.html#logging
+CELERY_WORKER_HIJACK_ROOT_LOGGER = False
+
+CELERY_WORKER_TASK_LOG_FORMAT = "%(task_name)s>> %(message)s"

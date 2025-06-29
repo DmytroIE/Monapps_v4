@@ -22,13 +22,8 @@ def exec_app_func(self) -> None:
     if (app_func := discover_app_func(app)) is None:
         return
 
-    logger.info(f"App {app.id} Start 'new df readings' procedure")
     NewDfrCreator(app).execute()
-    logger.info(f"App {app.id} 'New df readings' procedure finished")
-
-    logger.info(f"App {app.id}Run 'app function' routine")
     AppFuncExecutor(app, app_func, task).execute()
-    logger.info(f"App {app.id} 'app function' routine finished")
 
 
 def discover_task(ctx) -> Optional[PeriodicTask]:
@@ -52,10 +47,10 @@ def discover_app_func(app: Application) -> Optional[AppFunction]:
 
     app_func_cluster = app_function_map.get(app.type.func_name)
     if app_func_cluster is None:
-        logger.error(f"No {app.type.func_name} in the app function map")
+        logger.error(f"No '{app.type.func_name}' in the app function map")
         return
     app_func = app_func_cluster.get(app.func_version)
     if app_func is None:
-        logger.error(f"No version {app.func_version} for {app.type.func_name} in the app function map")
+        logger.error(f"No version '{app.func_version}' for '{app.type.func_name}'")
         return
     return app_func

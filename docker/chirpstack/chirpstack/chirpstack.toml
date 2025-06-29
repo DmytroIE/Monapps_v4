@@ -94,6 +94,6 @@
     password=""
     client_id="chirpstack"
     json=true
-    event_topic="rawdata/{{dev_eui}}/{{event}}"
+    event_topic="rawdata/chirpstack/{{dev_eui}}/{{event}}"
     command_topic="application/{{application_id}}/device/{{dev_eui}}/command/{{command}}"
 

@@ -1,3 +1,4 @@
+import logging
 from scipy.interpolate import PchipInterpolator
 from typing import Callable
 from django.utils import timezone
@@ -11,6 +12,8 @@ from apps.dfreadings.models import DfReading
 from common.complex_types import IndDfReadingMap
 from common.constants import DataAggrTypes, NotToUseDfrTypes, VariableTypes, AugmentationPolicy
 from utils.ts_utils import ceil_timestamp, create_grid, create_ts_ms_from_dt_obj
+
+logger = logging.getLogger(__name__)
 
 
 def create_df_readings(
@@ -52,7 +55,9 @@ def create_df_readings(
             return None, start_rts, None
         if not ds.is_totalizer:
             if nat_df.is_aug_on and ds.is_rbe:
-                df_reading_map = resample_and_augment_ds_readings(ds_readings, nat_df, ds, time_resample, start_rts, find_sum)
+                df_reading_map = resample_and_augment_ds_readings(
+                    ds_readings, nat_df, ds, time_resample, start_rts, find_sum
+                    )
             else:
                 df_reading_map = resample_ds_readings(ds_readings, nat_df, time_resample, find_sum)
         else:
@@ -103,11 +108,13 @@ def create_df_readings(
         rts_to_start_with_next_time = rts
 
     if len(df_readings) > 0:
+        logger.debug(f"Saving {len(df_readings)} df readings")
         DfReading.objects.bulk_create(
             df_readings,
             # update_conflicts=True, update_fields=["db_value"], unique_fields=["time", "datafeed_id"]
         )  # TODO: do we need all these kwargs?
         last_saved_dfr_rts = df_readings[-1].time
+        logger.debug(f"Last saved dfr rts: {last_saved_dfr_rts}")
 
     if len(df_reading_rtss) > 0:  # almost impossible that len(df_reading_rtss) == 0 if we got to this point
         last_dfr_rts = max(df_reading_rtss)  # it is the ts of the last (unclosed) df reading

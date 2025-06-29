@@ -207,6 +207,14 @@ class RawDataProcessor:
 
         # finally, save the datastream and readings
         ds.save(update_fields=ds.update_fields)
+        logger.debug(
+            f"""dsr: {len(ds_readings)},
+            ndm: {len(nd_markers)},
+            unus: {len(unused_ds_readings)},
+            invalid: {len(invalid_ds_readings)},
+            nonroc: {len(non_roc_ds_readings)},
+            unus ndm: {len(unused_nd_markers)}"""
+        )
         DsReading.objects.bulk_create(ds_readings, batch_size=100, ignore_conflicts=True)
         UnusedDsReading.objects.bulk_create(unused_ds_readings, batch_size=100, ignore_conflicts=True)
         InvalidDsReading.objects.bulk_create(invalid_ds_readings, batch_size=100, ignore_conflicts=True)
@@ -225,8 +233,10 @@ class RawDataProcessor:
             msg_health = HealthGrades.ERROR
         elif at_least_one_warning_in:
             msg_health = HealthGrades.WARNING
-        if set_attr_if_cond(msg_health, "!=", dev, "msg_health"):
-            enqueue_update(dev, self.now_ts)
 
-        # -2-2- finally, save the device
+        if not set_attr_if_cond(msg_health, "!=", dev, "msg_health"):
+            return
+
+        enqueue_update(dev, self.now_ts)
+
         dev.save(update_fields=dev.update_fields)

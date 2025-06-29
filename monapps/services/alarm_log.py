@@ -1,6 +1,7 @@
 from typing import Literal
 
 from django.db.models import Model
+from django.utils import timezone
 
 from utils.ts_utils import create_dt_from_ts_ms
 from utils.db_field_utils import get_instance_full_id
@@ -11,14 +12,18 @@ from utils.db_field_utils import get_instance_full_id
 def add_to_alarm_log(
     type: Literal["ERROR", "WARNING", "INFO"],
     msg: str,
-    ts: int,
+    ts: int | None = None,
     instance: Model | str = "Django",
     status: str = ""
 ):
     if not status:
         status = "IN"
 
-    dt_str = create_dt_from_ts_ms(ts).strftime("%Y/%m/%d %H:%M:%S")
+    if not ts:
+        dt_str = timezone.now().isoformat(timespec="milliseconds")
+    else:
+        dt_str = create_dt_from_ts_ms(ts).isoformat(timespec="milliseconds")
+
     if isinstance(instance, Model):
         instance_id = get_instance_full_id(instance)
     else:

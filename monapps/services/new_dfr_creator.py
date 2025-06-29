@@ -25,9 +25,10 @@ class NewDfrCreator:
         native_df_qs = self.app.get_native_df_qs()
         for df in native_df_qs:
             try:
+                logger.debug(f"Creating df readings for df {df.pk} {df.name}")
                 self.create_df_readings_for_ind_df(df)
             except Exception as e:
-                logger.error(f"Error happened while creating df readings for df {df.name}, {e}")
+                logger.error(f"Error while creating dfrs for df {df.pk} {df.name}, {e}")
 
     @transaction.atomic
     def create_df_readings_for_ind_df(self, nat_df: Datafeed) -> None:

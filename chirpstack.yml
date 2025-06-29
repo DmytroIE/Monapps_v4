@@ -1,6 +1,7 @@
 services:
   chirpstack:
     image: chirpstack/chirpstack:4
+    container_name: chirpstack
     command: -c /etc/chirpstack
     restart: unless-stopped
     volumes:
@@ -9,9 +10,9 @@ services:
       - chirpstack-postgres
       - chirpstack-redis
     environment:
-      - MQTT_BROKER_HOST=mosquitto
-      - REDIS_HOST=chirpstack-redis
-      - POSTGRESQL_HOST=chirpstack-postgres
+      MQTT_BROKER_HOST: mosquitto
+      REDIS_HOST: chirpstack-redis
+      POSTGRESQL_HOST: chirpstack-postgres
     ports:
       - "8080:8080"
     networks:
@@ -20,25 +21,27 @@ services:
 
   chirpstack-gateway-bridge:
     image: chirpstack/chirpstack-gateway-bridge:4
+    container_name: chirpstack-gateway-bridge
     restart: unless-stopped
     ports:
       - "1700:1700/udp"
     volumes:
       - ./docker/chirpstack/chirpstack-gateway-bridge:/etc/chirpstack-gateway-bridge
-    environment:
-      - INTEGRATION__MQTT__EVENT_TOPIC_TEMPLATE=eu868/gateway/{{ .GatewayID }}/event/{{ .EventType }}
-      - INTEGRATION__MQTT__STATE_TOPIC_TEMPLATE=eu868/gateway/{{ .GatewayID }}/state/{{ .StateType }}
-      - INTEGRATION__MQTT__COMMAND_TOPIC_TEMPLATE=eu868/gateway/{{ .GatewayID }}/command/#
+    # environment:
+    #   - INTEGRATION__MQTT__EVENT_TOPIC_TEMPLATE=eu868/gateway/{{ .GatewayID }}/event/{{ .EventType }}
+    #   - INTEGRATION__MQTT__STATE_TOPIC_TEMPLATE=eu868/gateway/{{ .GatewayID }}/state/{{ .StateType }}
+    #   - INTEGRATION__MQTT__COMMAND_TOPIC_TEMPLATE=eu868/gateway/{{ .GatewayID }}/command/#
     networks:
       - chirpstack_network
       - mosquitto_network
   
   chirpstack-postgres:
     image: postgres:14-alpine
+    container_name: chirpstack-postgres
     restart: unless-stopped
     volumes:
       - ./docker/chirpstack/postgresql/initdb:/docker-entrypoint-initdb.d
-      - cs_postgresql_data:/var/lib/postgresql/data
+      - chirpstack_postgresql_data:/var/lib/postgresql/data
     environment:
       - POSTGRES_USER=chirpstack
       - POSTGRES_PASSWORD=chirpstack
@@ -48,16 +51,19 @@ services:
 
   chirpstack-redis:
     image: redis:7-alpine
+    container_name: chirpstack-redis
     restart: unless-stopped
     command: redis-server --save 300 1 --save 60 100 --appendonly no
     volumes:
-      - cs_redis_data:/data
+      - chirpstack_redis_data:/data
     networks:
       - chirpstack_network
 
 volumes:
-  cs_postgresql_data:
-  cs_redis_data:
+  chirpstack_postgresql_data:
+    name: chirpstack_postgresql_data
+  chirpstack_redis_data:
+    name: chirpstack_redis_data
 
 networks:
   chirpstack_network:

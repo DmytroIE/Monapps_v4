@@ -28,7 +28,8 @@ COPY --chown=$USER:$USER ./monapps $APP_HOME
 
 RUN chmod +x /*.sh && \
     mkdir -p $APP_HOME/static && \
-    chown -R $USER:$USER $APP_HOME
+    chown -R $USER:$USER $APP_HOME && \
+    chown -R $USER:$USER /usr/src
 
 ENTRYPOINT ["/entrypoint.sh"]
 

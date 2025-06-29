@@ -2,32 +2,30 @@ import os
 import logging
 import paho.mqtt.client as mqtt
 
-from utils.ts_utils import create_now_ts_ms
-from services.alarm_log import add_to_alarm_log
+# from services.alarm_log import add_to_alarm_log
 
 logger = logging.getLogger(__name__)
 
 
 def on_connect(client: mqtt.Client, userdata, flags, reason_code, properties=None):
     if reason_code == 0:
-        add_to_alarm_log(
-            "INFO", "Connected to the broker", create_now_ts_ms(), instance=client._client_id.decode("utf-8")
-        )
+        # add_to_alarm_log(
+        #     "INFO", "Connected to the broker", instance=client._client_id.decode("utf-8")
+        # )
         logger.info(f"MQTT publisher {publisher_id} connected")
     else:
-        add_to_alarm_log(
-            "ERROR",
-            f"Failed to connect to the broker, reason code: {reason_code}",
-            create_now_ts_ms(),
-            instance=client._client_id.decode("utf-8"),
-        )
+        # add_to_alarm_log(
+        #     "ERROR",
+        #     f"Failed to connect to the broker, reason code: {reason_code}",
+        #     instance=client._client_id.decode("utf-8"),
+        # )
         logger.error(f"MQTT publisher {publisher_id} failed to connect, reason code: {reason_code}")
 
 
 def on_disconnect(client: mqtt.Client, userdata, flags, reason_code, properties):
-    add_to_alarm_log(
-        "INFO", "Disconnected from the broker", create_now_ts_ms(), instance=client._client_id.decode("utf-8")
-    )
+    # add_to_alarm_log(
+    #     "INFO", "Disconnected from the broker", instance=client._client_id.decode("utf-8")
+    # )
     logger.info(f"MQTT publisher {publisher_id} disconnected")
 
 

@@ -8,7 +8,7 @@ from django.conf import settings
 from common.constants import reeval_fields
 from utils.db_field_utils import get_parent_full_id, get_instance_full_id
 from utils.ts_utils import create_dt_from_ts_ms, create_now_ts_ms
-from services.alarm_log import add_to_alarm_log
+# from services.alarm_log import add_to_alarm_log
 from utils.update_utils import enqueue_update, update_reeval_fields
 from services.mqtt_publisher import mqtt_publisher
 
@@ -38,39 +38,49 @@ class PublishingOnSaveModel(models.Model):
 
     def save(self, **kwargs):
         super().save(**kwargs)
-
+        logger.debug(f"<{get_instance_full_id(self)}>: Saving")
         # 'update_fields' is used to collect the names of the fields that were changed.
         # It will then be used in the 'save' method and reset.
         # To align with the Django 'save' method signature, this field should be
-        # used explicitly in the 'save' method -> instance.save(update_fields=instance.update_fields)
-        # However, this field is used in some auxiliary functions, so it is better to use it
-        # than some arbitrary set.
-        # If 'update_fields' is None or its length > 0, it means that
-        # there are some real changes in the saved instance (we assume that we save any model
+        # used explicitly in the 'save' method -> instance.save(update_fields=instance.update_fields).
+        # Sure, it is possible to use any set variable, but this built-in field can "collect"
+        # changes while the instance is going through many changing functions.
+        # Also, some auxiliary functions count on this field, so it is recommended to use it.
+        # If the length of 'update_fields' is greater than 0 by this point, it means that
+        # some real changes in the saved instance (we assume that we save any model
         # only when some of its fields were changed, so the database is not hit for no reason).
-        # Also, it is very important to publish on MQTT only when some fields of the model has changed
-        # because the frontend app will also react when new publishing takes place
+        # In this case, it is responsibility of the caller to enqueue the update of the parent.
+        # If 'update_fields' is 'None', it most likely that the instance was saved
+        # in the admin console. In this case, the parent update with all reeval fields 
+        # will be enqueued here. Therefore, don't save the paren in the code without
+        # explicit 'update_fields' parameter.
         update_fields = kwargs.get("update_fields")
-        # if the result of 'kwargs.get("update_fields")' is None, it will substitute
-        # both '"update_fields" not in kwargs' and 'kwargs["update_fields"] is None'
+        logger.debug(f"<{get_instance_full_id(self)}>: update_fields: {update_fields}")
+
         if update_fields is None or len(update_fields) > 0:
-            add_to_alarm_log("INFO", f"Something to publish, {update_fields=}", create_now_ts_ms(), instance=self)
-            self.publish_on_mqtt()
-            self.update_parent(update_fields)
+            self.publish_on_mqtt(update_fields)
+        if update_fields is None:
+            self.update_parent_at_bulk_save()
 
         # reset after all the processing
         self.update_fields = set()
 
-    def publish_on_mqtt(self):
+    def publish_on_mqtt(self, update_fields):
         if mqtt_publisher is None or not mqtt_publisher.is_connected():
             return
 
+        # check if at least one of 'update_fields' is in list of fields to publish
+        if update_fields is not None and len(self.published_fields.intersection(update_fields)) == 0:
+            return
+
+        logger.info(f"<{get_instance_full_id(self)}>: Something to publish on MQTT")
         mqtt_pub_dict = self.create_mqtt_pub_dict()
 
-        topic = f"procdata/{settings.INSTANCE_ID}/{self._meta.model_name}/{self.pk}"
+        topic = f"procdata/{settings.MONAPP_INSTANCE_ID}/{self._meta.model_name}/{self.pk}"
         payload_str = json.dumps(mqtt_pub_dict)
-        mess_info = mqtt_publisher.publish(topic, payload_str, qos=0, retain=True)
-        add_to_alarm_log("INFO", "Changes published", create_now_ts_ms(), instance=self)
+        mqtt_publisher.publish(topic, payload_str, qos=0, retain=True)
+        # add_to_alarm_log("INFO", "Changes published", instance=self)
+        logger.info(f"<{get_instance_full_id(self)}>: Changes published")
 
     def create_mqtt_pub_dict(self) -> dict:
         mqtt_pub_dict = {}
@@ -81,31 +91,23 @@ class PublishingOnSaveModel(models.Model):
         for field in self.published_fields:
             attr = getattr(self, field, "NO_ATTR")
             if attr == "NO_ATTR":
-                logger.warning(f"No attribute {field} in {self} to publish")
+                logger.warning(f"<{get_instance_full_id(self)}>: No attribute {field} to publish")
                 continue
             camelized_field = humps.camelize(field)
             mqtt_pub_dict[camelized_field] = attr
 
         return mqtt_pub_dict
 
-    def update_parent(self, update_fields):
+    def update_parent_at_bulk_save(self):
         if self.parent is None:
             return
 
-        if update_fields is None:
-            # it happens usually when the instance is saved in the admin console
-            # in this case, updated all three fields of the parent
-            parent_reeval_fields = reeval_fields
-        else:
-            parent_reeval_fields = reeval_fields.intersection(update_fields)
-        if len(parent_reeval_fields) == 0:
-            return
-
-        if update_reeval_fields(self.parent, parent_reeval_fields):
-            print(f"!!!parent needs to be reevaluated: {parent_reeval_fields}")
-            if enqueue_update(self.parent, create_now_ts_ms()):
-                print("!!!parent update was not previously enqueued")
-                self.parent.save(update_fields=self.parent.update_fields)
+        logger.debug(f"<{get_instance_full_id(self)}>: Updating parent from the 'save' method")
+        update_reeval_fields(self.parent, reeval_fields)
+        logger.debug(f"<{get_instance_full_id(self)}>: To be reevaluated: {reeval_fields}")
+        enqueue_update(self.parent, create_now_ts_ms(), coef=0.2)
+        logger.debug(f"<{get_instance_full_id(self)}>: Update enqueued for {self.parent.next_upd_ts}")
+        self.parent.save(update_fields=self.parent.update_fields)
 
 
 class AnyDsReading(models.Model):
@@ -147,5 +149,5 @@ class AnyNoDataMarker(models.Model):
     datastream = models.ForeignKey("datastreams.Datastream", on_delete=models.PROTECT)
 
     def __str__(self):
-        dt_str = create_dt_from_ts_ms(self.time).strftime("%Y/%m/%d %H:%M:%S")
-        return f"{self.short_name} ds:{self.datastream.pk} ts:{dt_str}"
+        dt_str = create_dt_from_ts_ms(self.time).strftime("%Y/%m/%d %H:%M:%S.%f")
+        return f"{self.short_name} ds:{self.datastream.pk} ts:{dt_str[:-3]}"

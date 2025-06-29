@@ -7,27 +7,23 @@ LOGGING = {
     "disable_existing_loggers": False,
     "handlers": {
         "console": {
+            "level": "DEBUG",
             "class": "logging.StreamHandler",
             "formatter": "simple",
+            "filters": ["WorkerVerboseFilter"],
         },
-        "file": {
-            "class": "logging.FileHandler",
-            "filename": "log.log",
-            "formatter": "simple",
+    },
+    "filters": {
+        "WorkerVerboseFilter": {
+            "()": "utils.log_filters.WorkerVerboseFilter",
         },
     },
     "formatters": {
         "simple": {"format": "|%(levelname)s|\t|%(asctime)s|\t|%(module)s|\t'%(message)s'"},
     },
-    "loggers": {
-        "django": {
-            "handlers": ["file"],
-            "level": "WARNING",
-        },
-    },
     "root": {
         "handlers": ["console"],
-        "level": "INFO",
+        "level": "DEBUG",
     },
 }
 

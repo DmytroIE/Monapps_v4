@@ -8,6 +8,4 @@ logger = logging.getLogger(__name__)
 
 @shared_task(bind=True, name="update.assets")
 def update_assets(self):
-    logger.info("Updating assets")
     AssetUpdater().execute()
-    logger.info("Assets were updated")

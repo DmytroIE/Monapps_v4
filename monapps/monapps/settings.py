@@ -117,7 +117,6 @@ USE_TZ = True
 STATIC_URL = "static/"
 
 
-
 # if (SENTRY_DSN := os.environ.get('SENTRY_DSN')) and ENABLE_SENTRY:
 #     # More information on site https://sentry.io/
 #     from sentry_sdk import init
@@ -147,8 +146,6 @@ STATIC_URL = "static/"
 #         # django.contrib.auth) you may enable sending PII data.
 #         send_default_pii=True,
 #     )
-
-
 
 
 if os.environ.get("DEV_MODE", "0") == "1":

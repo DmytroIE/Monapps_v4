@@ -160,44 +160,38 @@ update_func_by_property_map = {
 }
 
 
-def enqueue_update(asset_lnk, now_ts: int) -> bool:
+def enqueue_update(asset_lnk, now_ts: int, coef=0.8):
     """
     Adjusts the next update time of the asset.
 
     :param asset_lnk: device/asset instance (will be changed in-place)
     :param now_ts: the timestamp of the moment when the enqueuement is called
     """
-    changed = False
     if asset_lnk is None:
-        return changed
+        return
 
-    if asset_lnk.next_upd_ts > now_ts + settings.TIME_ASSET_UPD_MS:
-        asset_lnk.next_upd_ts = now_ts + settings.TIME_ASSET_UPD_MS
+    time_margin = int(settings.TIME_ASSET_UPD_MS * coef)
+    if asset_lnk.next_upd_ts > now_ts + time_margin:
+        asset_lnk.next_upd_ts = now_ts + time_margin
         asset_lnk.update_fields.add("next_upd_ts")
-        changed = True
-
-    return changed
 
 
-def update_reeval_fields(asset_lnk, fields: str | Iterable[str]) -> bool:
+def update_reeval_fields(asset_lnk, fields: str | Iterable[str]):
     """
     Updates the 'reeval_fields' property.
 
     :param asset_lnk: the parent asset instance (will be changed in-place)
     :param fields: a field / list of fields changed in the child asset that may need to be reevaluated in the parent
     """
-    changed = False
+
     if asset_lnk is None or not hasattr(asset_lnk, "reeval_fields"):
-        return changed
+        return
     if isinstance(fields, str):
         fields = [fields]
     for field in fields:
         if field not in asset_lnk.reeval_fields:
             asset_lnk.reeval_fields.append(field)
             asset_lnk.update_fields.add("reeval_fields")  # for the 'save' function
-            changed = True
-
-    return changed
 
 
 def set_attr_if_cond(new_value, cond, instance, field_name):
@@ -215,7 +209,7 @@ def set_attr_if_cond(new_value, cond, instance, field_name):
             if new_value == old_value:
                 return False
         case _:
-            raise ValueError("Unknown condition")
+            raise ValueError(f"Unknown condition: {cond}")
     setattr(instance, field_name, new_value)
     instance.update_fields.add(field_name)
     return True
