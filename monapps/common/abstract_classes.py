@@ -102,11 +102,13 @@ class PublishingOnSaveModel(models.Model):
         if self.parent is None:
             return
 
-        logger.debug(f"<{get_instance_full_id(self)}>: Updating parent from the 'save' method")
-        update_reeval_fields(self.parent, reeval_fields)
-        logger.debug(f"<{get_instance_full_id(self)}>: To be reevaluated: {reeval_fields}")
-        enqueue_update(self.parent, create_now_ts_ms(), coef=0.2)
-        logger.debug(f"<{get_instance_full_id(self)}>: Update enqueued for {self.parent.next_upd_ts}")
+        logger.debug(f"<{get_instance_full_id(self)}>: Updating parent from the bulk 'save' method")
+        if hasattr(self.parent, "reeval_fields"):
+            update_reeval_fields(self.parent, reeval_fields)
+            logger.debug(f"<{get_instance_full_id(self)}>: To be reevaluated: {reeval_fields}")
+        if hasattr(self.parent, "next_upd_ts"):
+            enqueue_update(self.parent, create_now_ts_ms(), coef=0.2)
+            logger.debug(f"<{get_instance_full_id(self)}>: Update enqueued for {self.parent.next_upd_ts}")
         self.parent.save(update_fields=self.parent.update_fields)
 
 

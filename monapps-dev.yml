@@ -14,6 +14,7 @@ services:
     volumes:
       - ./monapps/:/usr/src/monapps/
       - monapps_postgres_socket:/postgres_socket
+      - monapps_main_migrations:/usr/src/
     ports:
       - "5000:8000"
     environment:
@@ -191,7 +192,7 @@ services:
     container_name: monapps-redis
     restart: unless-stopped
     volumes:
-      - monapps-redis_data:/data
+      - monapps_redis_data:/data
     networks:
       - monapps_network
     # healthcheck:
@@ -205,11 +206,13 @@ volumes:
     name: monapps_postgres_data
   monapps_postgres_socket:
     name: monapps_postgres_socket
-  monapps-redis_data:
-    name: monapps-redis_data
+  monapps_redis_data:
+    name: monapps_redis_data
+  monapps_main_migrations:
+    name: monapps_main_migrations
 
 networks:
-  monapps_network:
   mosquitto_network:
     name: mosquitto_network
     external: true
+  monapps_network:

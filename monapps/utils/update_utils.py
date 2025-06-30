@@ -167,7 +167,7 @@ def enqueue_update(asset_lnk, now_ts: int, coef=0.8):
     :param asset_lnk: device/asset instance (will be changed in-place)
     :param now_ts: the timestamp of the moment when the enqueuement is called
     """
-    if asset_lnk is None:
+    if asset_lnk is None or not hasattr(asset_lnk, "next_upd_ts"):
         return
 
     time_margin = int(settings.TIME_ASSET_UPD_MS * coef)
