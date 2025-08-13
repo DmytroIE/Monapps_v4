@@ -1,4 +1,6 @@
 import logging
+import traceback
+from itertools import islice
 from collections.abc import Iterable
 
 from django.db import transaction
@@ -19,10 +21,10 @@ from utils.ts_utils import create_now_ts_ms
 from utils.update_utils import set_attr_if_cond, enqueue_update
 from utils.alarm_utils import update_alarm_map, at_least_one_alarm_in
 from utils.sequnce_utils import find_max_ts
-from services.alarm_log import add_to_alarm_log
+from services.device_log import add_to_device_log
 from common.constants import HealthGrades, VariableTypes, DataAggrTypes
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("#raw_data_proc")
 
 
 class RawDataProcessor:
@@ -32,7 +34,6 @@ class RawDataProcessor:
         self.payload = payload
         self.int_key_payload = {}
 
-    @transaction.atomic
     def execute(self):
 
         if not self.discover_device():
@@ -42,16 +43,18 @@ class RawDataProcessor:
         if not self.condition_payload():
             logger.error("No valid timestamps in the payload")
             return
-
-        self.prepare_datastream_for_processing()
-
-        self.process_payload()
-
-        self.process_after_cycle()
+        try:
+            with transaction.atomic():
+                self.prepare_for_processing()
+                self.process_payload()
+                self.process_after_cycle()
+        except Exception:
+            # add_to_alarm_log("ERROR", "Error while processing a message", instance="MQTT Sub")
+            logger.error(f"Error while processing a message: {traceback.format_exc(-1)}")
 
     def discover_device(self):
         try:
-            self.dev = Device.objects.select_for_update().get(dev_ui=self.dev_ui)
+            self.dev = Device.objects.get(dev_ui=self.dev_ui)
             return True
         except (Device.DoesNotExist, Device.MultipleObjectsReturned):
             return False
@@ -72,7 +75,8 @@ class RawDataProcessor:
             else:
                 self.int_key_payload[ts] = v
 
-    def prepare_datastream_for_processing(self):
+    def prepare_for_processing(self):
+        self.dev = Device.objects.select_for_update().get(dev_ui=self.dev.dev_ui)
         ds_qs = self.dev.datastreams.filter(is_enabled=True).select_for_update()  # get ACTIVE datastreams only
         self.ds_map = {ds.name: ds for ds in ds_qs}
         self.nd_marker_map = {ds.name: set() for ds in ds_qs}
@@ -106,7 +110,9 @@ class RawDataProcessor:
         error_dict = ds_row.get("e")
         # even if 'error_dict_for_ts' is None, the alarm map will be processed
         # to ensure 'out' statuses proper assigment
-        upd_error_map, is_nd_marker_needed = update_alarm_map(ds, error_dict, ts, "errors", has_value)
+        upd_error_map, is_nd_marker_needed = update_alarm_map(
+            ds, error_dict, ts, "errors", has_value, add_to_log=add_to_device_log
+        )
 
         set_attr_if_cond(upd_error_map, "!=", ds, "errors")
 
@@ -118,20 +124,25 @@ class RawDataProcessor:
 
         # process warnings
         warning_dict = ds_row.get("w")
-        upd_warning_map, _ = update_alarm_map(ds, warning_dict, ts, "warnings")
+        upd_warning_map, _ = update_alarm_map(ds, warning_dict, ts, "warnings", add_to_log=add_to_device_log)
         set_attr_if_cond(upd_warning_map, "!=", ds, "warnings")
 
         # process infos
         infos_for_ts = ds_row.get("i")
         if infos_for_ts is not None and isinstance(infos_for_ts, Iterable):
             for info_str in infos_for_ts:
-                add_to_alarm_log("INFO", info_str, ts, ds, "")
+                add_to_device_log("INFO", info_str, ts, ds, "")
 
     def process_dev_payload(self, dev: Device, ts: int, row: dict):
         # process errors
         error_dict = row.get("e")
         upd_error_map, is_nd_marker_needed = update_alarm_map(
-            dev, error_dict, ts, "errors", self.at_least_one_ds_has_no_errors_and_has_value
+            dev,
+            error_dict,
+            ts,
+            "errors",
+            self.at_least_one_ds_has_no_errors_and_has_value,
+            add_to_log=add_to_device_log,
         )
         set_attr_if_cond(upd_error_map, "!=", dev, "errors")
 
@@ -140,14 +151,14 @@ class RawDataProcessor:
 
         # process device warnings
         warning_dict = row.get("w")
-        upd_warning_map, _ = update_alarm_map(dev, warning_dict, ts, "warnings")
+        upd_warning_map, _ = update_alarm_map(dev, warning_dict, ts, "warnings", add_to_log=add_to_device_log)
         set_attr_if_cond(upd_warning_map, "!=", dev, "warnings")
 
         # process device infos
         infos = row.get("i")
         if infos is not None and isinstance(infos, Iterable):
             for info_str in infos:
-                add_to_alarm_log("INFO", info_str, ts, dev)
+                add_to_device_log("INFO", info_str, ts, dev)
 
         # add nd markers to the array to be saved later
         for ds_name in self.needing_nd_marker_dss:
@@ -207,20 +218,23 @@ class RawDataProcessor:
 
         # finally, save the datastream and readings
         ds.save(update_fields=ds.update_fields)
-        logger.debug(
-            f"""dsr: {len(ds_readings)},
-            ndm: {len(nd_markers)},
-            unus: {len(unused_ds_readings)},
-            invalid: {len(invalid_ds_readings)},
-            nonroc: {len(non_roc_ds_readings)},
-            unus ndm: {len(unused_nd_markers)}"""
+
+        t = (
+            (ds_readings, DsReading),
+            (unused_ds_readings, UnusedDsReading),
+            (invalid_ds_readings, InvalidDsReading),
+            (non_roc_ds_readings, NonRocDsReading),
+            (nd_markers, NoDataMarker),
+            (unused_nd_markers, UnusedNoDataMarker),
         )
-        DsReading.objects.bulk_create(ds_readings, batch_size=100, ignore_conflicts=True)
-        UnusedDsReading.objects.bulk_create(unused_ds_readings, batch_size=100, ignore_conflicts=True)
-        InvalidDsReading.objects.bulk_create(invalid_ds_readings, batch_size=100, ignore_conflicts=True)
-        NonRocDsReading.objects.bulk_create(non_roc_ds_readings, batch_size=100, ignore_conflicts=True)
-        NoDataMarker.objects.bulk_create(nd_markers, batch_size=100, ignore_conflicts=True)
-        UnusedNoDataMarker.objects.bulk_create(unused_nd_markers, batch_size=100, ignore_conflicts=True)
+        for objects, model in t:
+            batch_size = 100
+            for i in range(0, len(objects), batch_size):
+                if (batch:= objects[i:i + batch_size]):
+                    # ignore_conflicts=True will skip saving the object if it already exists
+                    # TODO: how to track such "unsaved" objects?
+                    model.objects.bulk_create(batch, batch_size=len(batch), ignore_conflicts=True)
+            logger.debug(f"Saved {len(objects)} {model.__name__}")
 
     def process_dev_after_cycle(self, dev: Device):
         # define device health

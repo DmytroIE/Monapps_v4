@@ -12,7 +12,7 @@ from utils.ts_utils import create_dt_from_ts_ms, create_now_ts_ms
 from utils.update_utils import enqueue_update, update_reeval_fields
 from services.mqtt_publisher import mqtt_publisher
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("#abs_classes")
 
 
 class PublishingOnSaveModel(models.Model):
@@ -51,7 +51,7 @@ class PublishingOnSaveModel(models.Model):
         # only when some of its fields were changed, so the database is not hit for no reason).
         # In this case, it is responsibility of the caller to enqueue the update of the parent.
         # If 'update_fields' is 'None', it most likely that the instance was saved
-        # in the admin console. In this case, the parent update with all reeval fields 
+        # in the admin console. In this case, the parent update with all reeval fields
         # will be enqueued here. Therefore, don't save the paren in the code without
         # explicit 'update_fields' parameter.
         update_fields = kwargs.get("update_fields")
@@ -73,14 +73,13 @@ class PublishingOnSaveModel(models.Model):
         if update_fields is not None and len(self.published_fields.intersection(update_fields)) == 0:
             return
 
-        logger.info(f"<{get_instance_full_id(self)}>: Something to publish on MQTT")
         mqtt_pub_dict = self.create_mqtt_pub_dict()
 
         topic = f"procdata/{settings.MONAPP_INSTANCE_ID}/{self._meta.model_name}/{self.pk}"
         payload_str = json.dumps(mqtt_pub_dict)
         mqtt_publisher.publish(topic, payload_str, qos=0, retain=True)
         # add_to_alarm_log("INFO", "Changes published", instance=self)
-        logger.info(f"<{get_instance_full_id(self)}>: Changes published")
+        logger.info(f"<{get_instance_full_id(self)}>: Changes published on MQTT")
 
     def create_mqtt_pub_dict(self) -> dict:
         mqtt_pub_dict = {}
@@ -126,17 +125,23 @@ class AnyDsReading(models.Model):
     @property
     def value(self) -> float | int:
         if self.datastream.is_value_interger:
-            return round(self.db_value)
+            return int(self.db_value)
         else:
             return self.db_value
 
     @value.setter
     def value(self, value: float) -> None:
-        self.db_value = value
+        if self.datastream.is_value_interger:
+            self.db_value = round(value, 0)
+        else:
+            self.db_value = value
 
     def __str__(self):
         dt_str = create_dt_from_ts_ms(self.time).strftime("%Y/%m/%d %H:%M:%S")
-        return f"{self.short_name} ds:{self.datastream.pk} ts:{dt_str} val: {self.value}"
+        if self.datastream.is_value_interger:
+            return f"{self.short_name} ds:{self.datastream.pk} ts:{dt_str} val: {self.value}"
+        else:
+            return f"{self.short_name} ds:{self.datastream.pk} ts:{dt_str} val: {self.value:.3f}"
 
 
 class AnyNoDataMarker(models.Model):

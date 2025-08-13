@@ -19,5 +19,3 @@ MAX_DEVICES_TO_UPD = 50
 
 # it is datetime(2999, 12, 31, 23, 59, 59, 999999, tzinfo=timezone.utc), something similar to Infinity
 MAX_TS_MS = 32503679999999
-# delay from 'now_ts' for the last reading in augmentation procedure with the policy TILL_NOW
-TILL_NOW_MARGIN_MS = 0

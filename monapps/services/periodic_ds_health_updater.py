@@ -7,7 +7,7 @@ from common.constants import HealthGrades
 from utils.ts_utils import create_now_ts_ms
 from utils.update_utils import enqueue_update, set_attr_if_cond
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("#ds_health_upd")
 
 
 class PeriodicDsHealthUpdater:

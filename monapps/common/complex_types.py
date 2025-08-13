@@ -30,6 +30,7 @@ class UpdateMap(TypedDict, total=False):
     is_catching_up: bool
     health: HealthGrades
     alarm_payload: dict
+    state: dict
 
 
 class DerivedDfReadingRow(TypedDict):

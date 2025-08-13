@@ -1,1 +1,1 @@
-from .ver_0_0_1 import fake_data_generator_0_0_1
+from .ver_1_0_0 import fake_data_generator_1_0_0

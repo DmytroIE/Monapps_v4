@@ -17,9 +17,6 @@ class Datastream(PublishingOnSaveModel):
         db_table = "datastreams"
         constraints = [
             models.UniqueConstraint(fields=["name", "parent_id"], name="unique_name_device"),
-            # models.CheckConstraint(
-            #     check=models.Q(meas_unit__data_type_id=models.F("data_type_id")), name="ds_meas_unit_data_type"
-            # ),
         ]
 
     published_fields = {"health", "last_reading_ts", "is_enabled"}
@@ -33,6 +30,7 @@ class Datastream(PublishingOnSaveModel):
         MeasUnit, on_delete=models.PROTECT, related_name="+", related_query_name="+", null=True, blank=True
     )  # null=True, blank=True is for dimensionless datastreams
 
+    # 'is_totalizer' works only with agg_type = SUM
     is_totalizer = models.BooleanField(default=False)  # only for 'agg_type' = SUM
     is_rbe = models.BooleanField(default=False)  # report by exception, for dss with 'time_update==null' it 99% will be True
 
@@ -44,6 +42,9 @@ class Datastream(PublishingOnSaveModel):
     time_change = models.BigIntegerField(
         default=None, blank=True, null=True
     )  # not null for CONT + AVG (and maybe for totalizers)
+
+    # 'till_now_margin' is applicable only for rbe datastreams
+    till_now_margin = models.BigIntegerField(default=0)
 
     # a datastream can be deactivated, if all are deactivated, then the parent device is also deactivated
     is_enabled = models.BooleanField(default=True)
@@ -77,8 +78,6 @@ class Datastream(PublishingOnSaveModel):
     def __str__(self):
         return f"Datastream {self.pk} {self.name}"
 
-    # __is_enabled = None
-
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.__is_enabled = self.is_enabled
@@ -87,7 +86,7 @@ class Datastream(PublishingOnSaveModel):
         if not self.pk:
             # https://stackoverflow.com/questions/1737017/django-auto-now-and-auto-now-add
             self.created_ts = create_now_ts_ms()
-        if self.is_enabled is not None and self.__is_enabled != self.is_enabled:
+        if self.__is_enabled != self.is_enabled and not self.is_enabled:
             self.health = HealthGrades.UNDEFINED
             self.msg_health = HealthGrades.UNDEFINED
             self.nd_health = HealthGrades.UNDEFINED

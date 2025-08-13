@@ -23,14 +23,20 @@ class DfReading(models.Model):
     @property
     def value(self) -> float | int:
         if self.datafeed.is_value_interger:
-            return round(self.db_value)
+            return int(self.db_value)
         else:
             return self.db_value
 
     @value.setter
     def value(self, value: float) -> None:
-        self.db_value = value
+        if self.datafeed.is_value_interger:
+            self.db_value = round(value, 0)
+        else:
+            self.db_value = value
 
     def __str__(self):
         dt_str = create_dt_from_ts_ms(self.time).strftime("%Y/%m/%d %H:%M:%S")
-        return f"DFR df:{self.datafeed.pk} ts:{dt_str} val: {self.value}"
+        if self.datafeed.is_value_interger:
+            return f"DFR df:{self.datafeed.pk} ts:{dt_str} val: {self.value} {'R' if self.restored else ''}"
+        else:
+            return f"DFR df:{self.datafeed.pk} ts:{dt_str} val: {self.value:.3f} {'R' if self.restored else ''}"

@@ -14,8 +14,6 @@ from common.constants import (
     DEFAULT_TIME_STATUS_STALE,
     DEFAULT_TIME_CURR_STATE_STALE,
     DEFAULT_TIME_APP_HEALTH_ERROR,
-    STATUS_FIELD_NAME,
-    CURR_STATE_FIELD_NAME,
 )
 from utils.ts_utils import create_now_ts_ms
 
@@ -29,26 +27,7 @@ class AppType(models.Model):
     description = models.TextField(max_length=1000, blank=True)
     main_purp = models.CharField(default=AppPurps.NONE, choices=AppPurps.choices)
 
-    # looks like {name1: {datatype: datatype_name1, derived: bool}, name2: ...}, for instance,
-    # {"Temp inlet": {"datatype: "Temperature", "derived": False},
-    #  "Temp outlet": {"datatype: "Temperature", "derived": False},
-    #  "Current state": {"datatype": "State", "derived": True}
-    # 'derived' dfs don't have a corresponding datastream
-    # This should be used as a template when creating a new application instance
-    df_schema = models.JSONField(default=dict, blank=True)
-
-    # F.e. {"Delta": {"type": "number", "minimum": 0}, "Delay, sec": {"type": "integer", "minimum": 0, "maximum": 120}}
-    # -> https://json-schema.org/understanding-json-schema/basics
-    settings_jsonschema = models.JSONField(default=dict, blank=True)
     func_name = models.CharField(max_length=200)
-
-    @property
-    def has_status(self) -> bool:
-        return bool(self.df_schema.get(STATUS_FIELD_NAME))
-
-    @property
-    def has_curr_state(self) -> bool:
-        return bool(self.df_schema.get(CURR_STATE_FIELD_NAME))
 
     def __str__(self):
         return f"AppType '{self.name}'"
@@ -60,22 +39,22 @@ class Application(PublishingOnSaveModel):
         db_table = "applications"
 
     published_fields = {
-            "cursor_ts",
-            "status",
-            "is_status_stale",
-            "last_status_update_ts",
-            "curr_state",
-            "is_curr_state_stale",
-            "last_curr_state_update_ts",
-            "health",
-            "is_enabled",
-            "is_catching_up",
-        }
+        "cursor_ts",
+        "status",
+        "is_status_stale",
+        "last_status_update_ts",
+        "curr_state",
+        "is_curr_state_stale",
+        "last_curr_state_update_ts",
+        "health",
+        "is_enabled",
+        "is_catching_up",
+    }
 
     type = models.ForeignKey(AppType, on_delete=models.PROTECT)
     time_resample = models.BigIntegerField(default=DEFAULT_TIME_RESAMPLE)
 
-    settings = models.JSONField(default=dict, blank=True)  # application settings in format "{valid from": {settings},}
+    settings = models.JSONField(default=dict, blank=True)  # application settings according to JSON schema
     state = models.JSONField(default=dict, blank=True)  # for retaining the state between calculations
 
     errors = models.JSONField(default=dict, blank=True)
@@ -101,8 +80,6 @@ class Application(PublishingOnSaveModel):
     curr_state = models.IntegerField(default=None, choices=CurrStateTypes.choices, blank=True, null=True)
     last_status_update_ts = models.BigIntegerField(default=None, blank=True, null=True)
     last_curr_state_update_ts = models.BigIntegerField(default=None, blank=True, null=True)
-    time_status_eval = models.BigIntegerField(default=DEFAULT_TIME_RESAMPLE)
-    time_curr_state_eval = models.BigIntegerField(default=DEFAULT_TIME_RESAMPLE)
     status_use = models.IntegerField(default=StatusUse.AS_WARNING, choices=StatusUse.choices, blank=False, null=False)
     curr_state_use = models.IntegerField(
         default=CurrStateUse.AS_WARNING, choices=CurrStateUse.choices, blank=False, null=False
@@ -135,8 +112,6 @@ class Application(PublishingOnSaveModel):
     def name(self):
         return self.type.name
 
-    # __is_enabled = None
-
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.__is_enabled = self.is_enabled
@@ -145,7 +120,7 @@ class Application(PublishingOnSaveModel):
         if not self.pk:
             # https://stackoverflow.com/questions/1737017/django-auto-now-and-auto-now-add
             self.created_ts = create_now_ts_ms()
-        if self.__is_enabled is not None and self.__is_enabled != self.is_enabled:
+        if self.__is_enabled != self.is_enabled and not self.is_enabled:
             self.health = HealthGrades.UNDEFINED
             if "update_fields" in kwargs:
                 kwargs["update_fields"] = set([*kwargs["update_fields"], "health"])

@@ -1,4 +1,5 @@
 import logging
+import traceback
 from collections.abc import Iterable
 from typing import Literal
 from django.db import transaction, IntegrityError
@@ -13,8 +14,9 @@ from utils.sequnce_utils import find_instance_with_max_attr
 from utils.alarm_utils import update_alarm_map
 from utils.update_utils import enqueue_update, update_reeval_fields, set_attr_if_cond
 from services.alarm_log import add_to_alarm_log
+from services.app_log import add_to_app_log
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("#app_func_executor")
 
 
 class AppFuncExecutor:
@@ -39,9 +41,9 @@ class AppFuncExecutor:
             except IntegrityError:
                 logger.error("An attempt to rewrite existing df readings detected")
                 self.excep_health = HealthGrades.ERROR
-            except Exception as e:
+            except Exception:
                 self.excep_health = HealthGrades.ERROR
-                logger.error(f"Error happened while executing app function, {e}")
+                logger.error(f"Error happened while executing app function, {traceback.format_exc(-1)}")
 
         logger.debug("Update other parameters")
         self.run_post_exec_routine()
@@ -56,40 +58,48 @@ class AppFuncExecutor:
 
         derived_df_readings, self.update_map = self.app_func(self.app, native_df_map, derived_df_map)
 
+        self.update_catching_up()
+
         for df_row in derived_df_readings.values():
             df = df_row["df"]
             new_df_readings = df_row["new_df_readings"]
             latest_dfr = self.save_new_df_readings(new_df_readings)
             if latest_dfr is not None:
                 self.update_datafeed(df, latest_dfr)
-                if df.name == STATUS_FIELD_NAME and self.app.type.has_status:
+                if df.name == STATUS_FIELD_NAME:
                     self.assign_new_cs_st_value(latest_dfr, "status")
-                if df.name == CURR_STATE_FIELD_NAME and self.app.type.has_curr_state:
+                if df.name == CURR_STATE_FIELD_NAME:
                     self.assign_new_cs_st_value(latest_dfr, "curr_state")
 
-        self.update_catching_up()
         self.update_cursor_pos()
         self.update_alarms()
+        self.update_state()
 
     def save_new_df_readings(self, new_df_readings):
         latest_dfr = find_instance_with_max_attr(new_df_readings)
         if latest_dfr is not None:  # the same as 'if len(new_df_readings) > 0'
             DfReading.objects.bulk_create(new_df_readings)
-        logger.debug("New df readings were saved")
+            logger.debug("New df readings were saved")
         return latest_dfr
 
     def update_datafeed(self, df, latest_dfr):
         max_rts = latest_dfr.time
         if set_attr_if_cond(max_rts, ">", df, "last_reading_ts"):
             df.save(update_fields=df.update_fields)
-            logger.debug(f"Datafeed '{df.name}' was updated")
+            # logger.debug(f"Datafeed '{df.name}' was updated")
 
     def assign_new_cs_st_value(self, latest_dfr, name: Literal["status", "curr_state"]):
+
+        # when catching up, do not update status or curr_state, leave them frozen
+        # it will help to avoid hitting parent assets too often
+        if self.app.is_catching_up:
+            return
+
         if not set_attr_if_cond(latest_dfr.time, ">", self.app, f"last_{name}_update_ts"):
             return
         if not set_attr_if_cond(latest_dfr.value, "!=", self.app, name):
             return
-        full_name = "Current state" if name == "curr_state" else "Status"
+        full_name = CURR_STATE_FIELD_NAME if name == "curr_state" else STATUS_FIELD_NAME
         add_to_alarm_log("INFO", f"{full_name} changed", instance=self.app)
         logger.debug(f"{full_name} changed -> : {latest_dfr.value}")
 
@@ -100,11 +110,11 @@ class AppFuncExecutor:
         if not set_attr_if_cond(is_catching_up, "!=", self.app, "is_catching_up"):
             return
 
-        if is_catching_up and not self.app.is_catching_up:
+        if is_catching_up:
             self.task.interval = self.app.catch_up_interval
             self.task.save()
             logger.debug("Catching up started")
-        elif not is_catching_up and self.app.is_catching_up:
+        elif not is_catching_up:
             self.task.interval = self.app.invoc_interval
             self.task.save()
             logger.debug("Catching up finished")
@@ -121,17 +131,26 @@ class AppFuncExecutor:
             return
         for ts, row in alarm_payload.items():
             error_dict = row.get("e")
-            upd_error_map, _ = update_alarm_map(self.app, error_dict, ts, "errors")
+            upd_error_map, _ = update_alarm_map(
+                self.app, error_dict, ts, "errors", add_to_log=add_to_app_log
+            )
             set_attr_if_cond(upd_error_map, "!=", self.app, "errors")
 
             warning_dict = row.get("w")
-            upd_warning_map, _ = update_alarm_map(self.app, warning_dict, ts, "warnings")
+            upd_warning_map, _ = update_alarm_map(
+                self.app, warning_dict, ts, "warnings", add_to_log=add_to_app_log
+            )
             set_attr_if_cond(upd_warning_map, "!=", self.app, "warnings")
 
             app_infos_for_ts = row.get("i")
             if app_infos_for_ts is not None and isinstance(app_infos_for_ts, Iterable):
                 for info_str in app_infos_for_ts:
-                    add_to_alarm_log("INFO", info_str, ts=ts, instance=self.app)
+                    add_to_app_log("INFO", info_str, ts=ts, instance=self.app)
+
+    def update_state(self):
+        if (state := self.update_map.get("state")) is None:
+            return
+        set_attr_if_cond(state, "!=", self.app, "state")
 
     def run_post_exec_routine(self):
         self.update_staleness("status")
@@ -142,7 +161,14 @@ class AppFuncExecutor:
         self.update_parent(app_update_fields)
 
     def update_staleness(self, name: Literal["status", "curr_state"]):
-        has = getattr(self.app.type, f"has_{name}", False)
+
+        # when catching up, do not update status or curr_state, leave them frozen
+        # it will help to avoid hitting parent assets too often
+        if self.app.is_catching_up:
+            return
+
+        full_name = CURR_STATE_FIELD_NAME if name == "curr_state" else STATUS_FIELD_NAME
+        has = filter(lambda df: df.name == full_name, self.app.datafeeds)
         if not has:
             return
         last_update_ts = getattr(self.app, f"last_{name}_update_ts")
@@ -155,9 +181,11 @@ class AppFuncExecutor:
 
         if set_attr_if_cond(is_stale, "!=", self.app, f"is_{name}_stale"):
             if is_stale:
-                full_name = "Current state" if name == "curr_state" else "Status"
-                # add_to_alarm_log("INFO", f"{full_name} is stale", instance=self.app)
-                logger.debug(f"{full_name} became stale")
+                add_to_alarm_log("INFO", f"{full_name} is stale", instance=self.app)
+                logger.debug(f"{full_name} is stale")
+            else:
+                add_to_alarm_log("INFO", f"{full_name} is not stale", instance=self.app)
+                logger.debug(f"{full_name} is not stale")
 
     def eval_health_from_app(self):
         if (h := self.update_map.get("health")) is not None:
@@ -174,11 +202,18 @@ class AppFuncExecutor:
                 self.cs_health = HealthGrades.OK
 
     def update_health(self):
-        self.eval_health_from_app
+
+        # when catching up, do not update health
+        if self.app.is_catching_up:
+            return
+
+        self.eval_health_from_app()
         self.eval_cs_health()
+
         health = max(self.cs_health, self.health_from_app, self.excep_health)
+
         if set_attr_if_cond(health, "!=", self.app, "health"):
-            # add_to_alarm_log("INFO", "Health changed", instance=self.app)
+            add_to_alarm_log("INFO", "Health changed", instance=self.app)
             logger.debug(f"Health changed -> {health}")
 
     def update_parent(self, app_update_fields):

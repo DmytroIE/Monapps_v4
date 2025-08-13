@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterable
 
 from apps.datastreams.models import Datastream
@@ -11,6 +12,8 @@ from apps.dsreadings.models import (
 )
 from common.constants import DataAggrTypes, VariableTypes
 
+logger = logging.getLogger("#dsr_utils")
+
 
 def create_ds_readings(
     pairs_ts_value: dict[int, float | int], ds: Datastream, now: int
@@ -21,7 +24,15 @@ def create_ds_readings(
     non_roc_ds_readings = []
     if ds.data_type.agg_type == DataAggrTypes.AVG and ds.data_type.var_type == VariableTypes.CONTINUOUS:
         ds_readings, non_roc_ds_readings = roc_filter_ds_readings(ds_readings, ds)
-        NonRocDsReading.objects.bulk_create(non_roc_ds_readings)
+
+    if len(ds_readings) > 0:
+        logger.debug(f"Created {len(ds_readings)} ds_readings")
+    if len(unused_ds_readings) > 0:
+        logger.debug(f"Created {len(unused_ds_readings)} unused ds_readings")
+    if len(invalid_ds_readings) > 0:
+        logger.debug(f"Created {len(invalid_ds_readings)} invalid ds_readings")
+    if len(non_roc_ds_readings) > 0:
+        logger.debug(f"Created {len(non_roc_ds_readings)} non_roc ds_readings")
 
     return ds_readings, unused_ds_readings, invalid_ds_readings, non_roc_ds_readings
 
@@ -40,6 +51,11 @@ def create_nodata_markers(
             nd_markers.append(NoDataMarker(time=ts, datastream=ds))
         else:
             unused_nd_markers.append(UnusedNoDataMarker(time=ts, datastream=ds))
+
+    if len(nd_markers) > 0:
+        logger.debug(f"Created {len(nd_markers)} nd_markers.")
+    if len(unused_nd_markers) > 0:
+        logger.debug(f"Created {len(unused_nd_markers)} unused nd_markers.")
 
     return nd_markers, unused_nd_markers
 
@@ -76,6 +92,7 @@ def validate_ds_readings(
         else:
             ir = InvalidDsReading(time=r.time, value=r.value, datastream=r.datastream)
             invalid_ds_readings.append(ir)
+
     return valid_ds_readings, invalid_ds_readings
 
 
@@ -113,4 +130,5 @@ def roc_filter_ds_readings(
 
             prev_filt_val = r.value
             prev_filt_ts = r.time
+
     return proc_ds_readings, non_proc_ds_readings

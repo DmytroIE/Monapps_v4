@@ -10,4 +10,5 @@ urlpatterns = [
     path("dfreadings/", include("api.dfreadings.urls")),
     path("dsreadings/", include("api.dsreadings.urls")),
     path("nodes/", include("api.nodes.urls")),
+    path("health/", include("api.health_check.urls")),
 ]

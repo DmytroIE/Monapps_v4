@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# python manage.py wait_for_db
+python manage.py wait_for_db
 
 # https://stackoverflow.com/questions/37836764/run-command-in-docker-container-only-on-the-first-start
 CONTAINER_ALREADY_STARTED="/usr/src/already_started.txt"

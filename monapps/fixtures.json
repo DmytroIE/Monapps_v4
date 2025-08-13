@@ -3,7 +3,7 @@
         "model": "django_celery_beat.intervalschedule",
         "pk": 1,
         "fields": {
-            "every": 5,
+            "every": 10,
             "period": "seconds"
         }
     },
@@ -11,7 +11,7 @@
         "model": "django_celery_beat.intervalschedule",
         "pk": 2,
         "fields": {
-            "every": 10,
+            "every": 30,
             "period": "seconds"
         }
     },
@@ -19,15 +19,15 @@
         "model": "django_celery_beat.intervalschedule",
         "pk": 3,
         "fields": {
-            "every": 30,
-            "period": "seconds"
+            "every": 1,
+            "period": "minutes"
         }
     },
     {
         "model": "django_celery_beat.intervalschedule",
         "pk": 4,
         "fields": {
-            "every": 1,
+            "every": 5,
             "period": "minutes"
         }
     },
@@ -66,7 +66,7 @@
             "start_time": null,
             "enabled": true,
             "last_run_at": null,
-            "total_run_count": 1,
+            "total_run_count": 0,
             "date_changed": "2025-06-23T20:11:32.601Z",
             "description": ""
         }
@@ -128,34 +128,6 @@
         }
     },
     {
-        "model": "django_celery_beat.periodictask",
-        "pk": 4,
-        "fields": {
-            "name": "Fake Gen 1 Task",
-            "task": "evaluate.app_func",
-            "interval": 3,
-            "crontab": null,
-            "solar": null,
-            "clocked": null,
-            "args": "[]",
-            "kwargs": "{}",
-            "queue": null,
-            "exchange": null,
-            "routing_key": null,
-            "headers": "{}",
-            "priority": null,
-            "expires": null,
-            "expire_seconds": null,
-            "one_off": false,
-            "start_time": null,
-            "enabled": true,
-            "last_run_at": null,
-            "total_run_count": 0,
-            "date_changed": "2025-06-25T15:33:02.069Z",
-            "description": ""
-        }
-    },
-    {
         "model": "datatypes.datatype",
         "pk": 1,
         "fields": {
@@ -174,7 +146,7 @@
         "model": "datatypes.datatype",
         "pk": 2,
         "fields": {
-            "name": "Current State",
+            "name": "Current state",
             "agg_type": 2,
             "var_type": 3,
             "category_map": {
@@ -269,16 +241,6 @@
         }
     },
     {
-        "model": "datatypes.datatype",
-        "pk": 11,
-        "fields": {
-            "name": "State",
-            "agg_type": 2,
-            "var_type": 3,
-            "category_map": {}
-        }
-    },
-    {
         "model": "datatypes.measunit",
         "pk": 1,
         "fields": {
@@ -364,188 +326,6 @@
             "data_type": 8,
             "k": 1.0,
             "b": 0.0
-        }
-    },
-    {
-        "model": "applications.apptype",
-        "pk": 1,
-        "fields": {
-            "name": "Monitoring",
-            "description": "Pure monitoring",
-            "main_purp": "None",
-            "df_schema": {},
-            "settings_jsonschema": {},
-            "func_name": "monitoring"
-        }
-    },
-    {
-        "model": "applications.apptype",
-        "pk": 2,
-        "fields": {
-            "name": "Fake Data Generator",
-            "description": "Used as a generator of different status and current state values for testing the update algorithms. Also, sometimes can generate exceptions to test the exception handling in the wrapper.",
-            "main_purp": "None",
-            "df_schema": {
-                "Status": {
-                    "derived": true,
-                    "datatype": "State"
-                },
-                "Current state": {
-                    "derived": true,
-                    "datatype": "State"
-                }
-            },
-            "settings_jsonschema": {
-                "prob_exeption": {
-                    "type": "number",
-                    "maximum": 1,
-                    "minimum": 0
-                },
-                " prob_status_calc_omitted": {
-                    "type": "number",
-                    "maximum": 1,
-                    "minimum": 0
-                },
-                "prob_curr_state_calc_omitted": {
-                    "type": "number",
-                    "maximum": 1,
-                    "minimum": 0
-                }
-            },
-            "func_name": "fake_data_generator"
-        }
-    },
-    {
-        "model": "applications.application",
-        "pk": 1,
-        "fields": {
-            "type": 2,
-            "time_resample": 30000,
-            "settings": {
-                "prob_exeption": 0.2,
-                "prob_status_calc_omitted": 0.2,
-                "prob_curr_state_calc_omitted": 0.2
-            },
-            "state": {},
-            "errors": {},
-            "warnings": {},
-            "cursor_ts": 1750865550000,
-            "is_enabled": false,
-            "invoc_interval": 3,
-            "catch_up_interval": 3,
-            "is_catching_up": false,
-            "func_version": "0.0.1",
-            "status": 0,
-            "curr_state": 0,
-            "last_status_update_ts": null,
-            "last_curr_state_update_ts": null,
-            "time_status_eval": 60000,
-            "time_curr_state_eval": 60000,
-            "status_use": 1,
-            "curr_state_use": 1,
-            "time_status_stale": 120000,
-            "time_curr_state_stale": 120000,
-            "is_status_stale": false,
-            "is_curr_state_stale": false,
-            "task": 4,
-            "health": 0,
-            "time_health_error": 600000,
-            "parent": 3,
-            "created_ts": 1750856933276
-        }
-    },
-    {
-        "model": "assets.asset",
-        "pk": 1,
-        "fields": {
-            "name": "Workshop 1",
-            "description": "",
-            "custom_fields": {},
-            "asset_type": "Workshop",
-            "status": 3,
-            "curr_state": 1,
-            "last_status_update_ts": null,
-            "last_curr_state_update_ts": null,
-            "status_use": 1,
-            "curr_state_use": 1,
-            "health": 2,
-            "next_upd_ts": 32503679999999,
-            "reeval_fields": [],
-            "parent": null
-        }
-    },
-    {
-        "model": "assets.asset",
-        "pk": 2,
-        "fields": {
-            "name": "Heating Package 1",
-            "description": "",
-            "custom_fields": {},
-            "asset_type": "Heating package",
-            "status": 1,
-            "curr_state": 2,
-            "last_status_update_ts": null,
-            "last_curr_state_update_ts": null,
-            "status_use": 1,
-            "curr_state_use": 1,
-            "health": 1,
-            "next_upd_ts": 32503679999999,
-            "reeval_fields": [],
-            "parent": 1
-        }
-    },
-    {
-        "model": "assets.asset",
-        "pk": 3,
-        "fields": {
-            "name": "Heat exchager 1",
-            "description": "",
-            "custom_fields": {},
-            "asset_type": "Heat exchanger",
-            "status": 2,
-            "curr_state": 3,
-            "last_status_update_ts": null,
-            "last_curr_state_update_ts": null,
-            "status_use": 1,
-            "curr_state_use": 1,
-            "health": 3,
-            "next_upd_ts": 32503679999999,
-            "reeval_fields": [],
-            "parent": 2
-        }
-    },
-    {
-        "model": "datafeeds.datafeed",
-        "pk": 1,
-        "fields": {
-            "name": "Status",
-            "parent": 1,
-            "datastream": null,
-            "data_type": 1,
-            "meas_unit": null,
-            "df_type": "Status",
-            "is_rest_on": true,
-            "is_aug_on": true,
-            "aug_policy": 1,
-            "ts_to_start_with": 0,
-            "last_reading_ts": null
-        }
-    },
-    {
-        "model": "datafeeds.datafeed",
-        "pk": 2,
-        "fields": {
-            "name": "Current state",
-            "parent": 1,
-            "datastream": null,
-            "data_type": 2,
-            "meas_unit": null,
-            "df_type": "Current state",
-            "is_rest_on": true,
-            "is_aug_on": true,
-            "aug_policy": 1,
-            "ts_to_start_with": 0,
-            "last_reading_ts": null
         }
     }
 ]

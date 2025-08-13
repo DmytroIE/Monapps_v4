@@ -17,9 +17,6 @@ class Datafeed(PublishingOnSaveModel):
         db_table = "datafeeds"
         constraints = [
             models.UniqueConstraint(fields=["name", "parent_id"], name="unique_name_app"),
-            # models.CheckConstraint(
-            #     check=models.Q(meas_unit__data_type_id=models.F("data_type_id")), name="df_meas_unit_data_type"
-            # ),
         ]
 
     published_fields = {"last_reading_ts"}

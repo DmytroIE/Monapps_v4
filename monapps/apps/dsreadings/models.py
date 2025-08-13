@@ -13,7 +13,7 @@ class UnusedDsReading(AnyDsReading):
     class Meta:
         db_table = "unused_ds_readings"
 
-    short_name = "Unused DSR"
+    short_name = "Unus DSR"
 
 
 class InvalidDsReading(AnyDsReading):
@@ -21,7 +21,7 @@ class InvalidDsReading(AnyDsReading):
     class Meta:
         db_table = "invalid_ds_readings"
 
-    short_name = "Invalid DSR"
+    short_name = "Inval DSR"
 
 
 class NonRocDsReading(AnyDsReading):
@@ -29,7 +29,7 @@ class NonRocDsReading(AnyDsReading):
     class Meta:
         db_table = "nonroc_ds_readings"
 
-    short_name = "DSRNon-ROC DSR"
+    short_name = "Non-ROC DSR"
 
 
 class NoDataMarker(AnyNoDataMarker):
@@ -45,4 +45,4 @@ class UnusedNoDataMarker(AnyNoDataMarker):
     class Meta:
         db_table = "unused_nd_markers"
 
-    short_name = "Unused NDM"
+    short_name = "Unus NDM"

@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Callable
 import copy
 
 from apps.applications.models import Application
@@ -45,12 +45,18 @@ def at_least_one_alarm_in(alarm_map):
     return at_least_one_in
 
 
+type AddToLogFunc = Callable[
+    [Literal["ERROR", "WARNING", "INFO"], str, int, Device | Datastream | Application, str], None
+]
+
+
 def update_alarm_map(
     instance: Device | Datastream | Application,
     alarm_dict: AlarmPayloadDictForTs | None,
     ts: int,
     alarm_map_type: Literal["errors", "warnings"],
     has_value: bool = False,
+    add_to_log: AddToLogFunc = add_to_alarm_log,
 ):
     """
     This function updates certain type of an alarm map - "errors" or "warnings. Also, it puts all
@@ -59,6 +65,7 @@ def update_alarm_map(
     {"error 1 name": {"st": "in"}, "error 2 name ": {}, ...} and usually is part of payload coming from different
     devices and datastreams. If "has_value" is True, then persistent errors (but not warnings) that have status "in"
     will be assigned status "out" if there is no record for this error for this timestamp.
+    'add_to_log' is used to reflect alarm transitions in a certain log.
     """
     alarm_map = getattr(instance, alarm_map_type)
     log_level: Literal["ERROR", "WARNING"] = alarm_map_type[:-1].upper()
@@ -82,7 +89,7 @@ def update_alarm_map(
                     if upd_alarm_map[alarm_name]["st"] != new_status:
                         upd_alarm_map[alarm_name]["st"] = new_status
                         upd_alarm_map[alarm_name]["lastTransTs"] = ts
-                        add_to_alarm_log(log_level, alarm_name, ts, instance, new_status)
+                        add_to_log(log_level, alarm_name, ts, instance, new_status)
                         # also, an nd marker should be created when the alarm
                         # emerges first time after being "out"
                         if alarm_map_type == "errors" and new_status == "in":
@@ -100,7 +107,7 @@ def update_alarm_map(
                     if upd_alarm_map[alarm_name]["st"] != "in":
                         upd_alarm_map[alarm_name]["st"] = "in"
                         upd_alarm_map[alarm_name]["lastTransTs"] = ts
-                        add_to_alarm_log(log_level, alarm_name, ts, instance, "in")
+                        add_to_log(log_level, alarm_name, ts, instance, "in")
                         # also, an nd marker should be created when the alarm
                         # emerges first time after being "out"
                         if alarm_map_type == "errors":
@@ -117,7 +124,7 @@ def update_alarm_map(
                     upd_alarm_map[alarm_name]["lastTransTs"] = ts  # an arguable question what to put here when "out"
                     # print(f"Persistent alarm '{alarm_name}' comes FIRST TIME with st='{new_status}'")
                     if new_status == "in":  # if the first message has the status "out", then no sense in logging it
-                        add_to_alarm_log(log_level, alarm_name, ts, instance, "in")
+                        add_to_log(log_level, alarm_name, ts, instance, "in")
                         if alarm_map_type == "errors":
                             is_nd_marker_needed = True
                 else:
@@ -126,7 +133,7 @@ def update_alarm_map(
                     upd_alarm_map[alarm_name]["lastInPayloadTs"] = ts
                     upd_alarm_map[alarm_name]["lastTransTs"] = ts
                     # print(f"NON-Persistent alarm '{alarm_name}' comes FIRST TIME with st='in'")
-                    add_to_alarm_log(log_level, alarm_name, ts, instance, "in")
+                    add_to_log(log_level, alarm_name, ts, instance, "in")
                     if alarm_map_type == "errors":
                         is_nd_marker_needed = True
 
@@ -143,13 +150,13 @@ def update_alarm_map(
                 ind_alarm_obj["st"] = "out"
                 ind_alarm_obj["lastTransTs"] = ts
                 # print(f"Persistent alarm '{alarm_name}' st='out' because at least one ds has readings and no errors")
-                add_to_alarm_log(log_level, alarm_name, ts, instance, "out")
+                add_to_log(log_level, alarm_name, ts, instance, "out")
         else:
             # non-persisten alarms acquire "out" when there is no such an alarm in 'alarm_dict_for_ts'
             if ind_alarm_obj["st"] == "in" and (alarm_dict is None or alarm_dict.get(alarm_name) is None):
                 ind_alarm_obj["st"] = "out"
                 ind_alarm_obj["lastTransTs"] = ts
                 # print(f"NON-Persistent alarm '{alarm_name}' st='out' because no fresh alarm incoming readings")
-                add_to_alarm_log(log_level, alarm_name, ts, instance, "out")
+                add_to_log(log_level, alarm_name, ts, instance, "out")
 
     return upd_alarm_map, is_nd_marker_needed

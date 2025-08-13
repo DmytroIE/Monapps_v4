@@ -15,12 +15,12 @@ def get_end_rts(
 
     for df in datafeeds:
 
-        last_df_reating_rts_to_use = df.ts_to_start_with
+        last_df_reading_rts_to_use = df.ts_to_start_with
 
-        if last_df_reating_rts_to_use is None or last_df_reating_rts_to_use <= start_rts:
+        if last_df_reading_rts_to_use is None or last_df_reading_rts_to_use <= start_rts:
             df_last_rtss.append(start_rts)
         else:
-            df_last_rtss.append(last_df_reating_rts_to_use)
+            df_last_rtss.append(last_df_reading_rts_to_use)
 
     max_num_dfreadings_per_one_df_to_process = int(settings.NUM_MAX_DFREADINGS_TO_PROCESS / num_df_to_process)
     max_num_dfreadings_per_one_df_to_process = max(

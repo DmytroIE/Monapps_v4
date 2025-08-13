@@ -7,7 +7,7 @@ from utils.ts_utils import create_now_ts_ms
 from utils.update_utils import update_func_by_property_map, enqueue_update, update_reeval_fields, set_attr_if_cond
 from utils.db_field_utils import get_instance_full_id
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("#asset_updater")
 
 
 class AssetUpdater:

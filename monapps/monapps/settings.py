@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "apps.dfreadings",
     "apps.dsreadings",
     "apps.mqtt_sub",
+    "apps.wait_for_db",
 ]
 
 MIDDLEWARE = [

@@ -11,7 +11,7 @@ from utils.update_utils import (
     set_attr_if_cond
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("#dev_updater")
 
 
 class DeviceUpdater:

@@ -9,13 +9,16 @@ from common.constants import CURR_STATE_FIELD_NAME
 from utils.app_func_utils import get_end_rts, get_df_value_map
 from utils.alarm_utils import add_to_alarm_payload
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("#stall_det_0_0_1")
 
 
-def stall_detection_by_two_temps_0_0_1(
+def function(
     app: Application, native_df_map: dict[str, Datafeed], derived_df_map: dict[str, Datafeed]
 ) -> AppFuncReturn:
-
+    """
+    It's a legacy function that is left just for demo purposes.
+    Don't use it in production.
+    """
     logger.info("'stall_detection_by_two_temps_0_0_1' starts executing...")
 
     temp_in_df = native_df_map["Temp inlet"]
@@ -40,7 +43,7 @@ def stall_detection_by_two_temps_0_0_1(
         delta_t_in = app.settings.get("delta_t_in", 10)
         delta_t_out = app.settings.get("delta_t_out", 5)
 
-        prev_curr_state_dfr = DfReading.objects.filter(datafeed=curr_state_df, time=start_rts).first()
+        prev_curr_state_dfr = DfReading.objects.filter(datafeed__id=curr_state_df.pk, time=start_rts).first()
 
         if prev_curr_state_dfr is None:
             prev_curr_state = CurrStateTypes.UNDEFINED
@@ -93,3 +96,36 @@ def stall_detection_by_two_temps_0_0_1(
         update_map["alarm_payload"] = alarm_payload
 
     return derived_df_reading_map, update_map
+
+
+df_schema = {
+    "Temp input": {"derived": False, "data_type": "Temperature"},
+    "Temp output": {"derived": False, "data_type": "Temperature"},
+    CURR_STATE_FIELD_NAME: {"derived": True, "data_type": CURR_STATE_FIELD_NAME},
+}
+
+settings_jsonschema = {
+    "delta_t_in": {"type": "number", "maximum": 10, "minimum": 0},
+    "t_delay_ms": {"type": "integer", "maximum": 300000, "minimum": 0},
+    "delta_t_out": {"type": "number", "maximum": 10, "minimum": 0},
+}
+
+settings_jsonschema = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "#/settings/stall_detection_by_two_temps_0_0_1",
+    "title": "App settings",
+    "description": "Settings for <Stall detection by two temps 0.0.1>",
+    "type": "object",
+    "properties": {
+        "delta_t_in": {"type": "number", "maximum": 50, "minimum": 1},
+        "t_delay_ms": {"type": "number", "maximum": 300000, "minimum": 0},
+        "delta_t_out": {"type": "number", "maximum": 50, "minimum": 1},
+    },
+}
+
+stall_detection_by_two_temps_0_0_1 = {
+    "function": function,
+    "df_schema": df_schema,
+    "settings_jsonschema": settings_jsonschema,
+    "aux_jsonschemas": {},
+}

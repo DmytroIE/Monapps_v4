@@ -10,12 +10,12 @@ LOGGING = {
             "level": "DEBUG",
             "class": "logging.StreamHandler",
             "formatter": "simple",
-            "filters": ["WorkerVerboseFilter"],
+            "filters": ["OnlyLocalModulesFilter"],
         },
     },
     "filters": {
-        "WorkerVerboseFilter": {
-            "()": "utils.log_filters.WorkerVerboseFilter",
+        "OnlyLocalModulesFilter": {
+            "()": "utils.log_filters.OnlyLocalModulesFilter",
         },
     },
     "formatters": {

@@ -1,4 +1,5 @@
 import logging
+import traceback
 from django.db import transaction
 from django.conf import settings
 
@@ -6,12 +7,13 @@ from apps.applications.models import Application
 from apps.datastreams.models import Datastream
 from apps.datafeeds.models import Datafeed
 from apps.dsreadings.models import DsReading
+from apps.dfreadings.models import DfReading
 from common.constants import AugmentationPolicy
 from utils.dfr_utils import create_df_readings
 from utils.ts_utils import ceil_timestamp
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("#dfr_creator")
 
 
 class NewDfrCreator:
@@ -25,10 +27,9 @@ class NewDfrCreator:
         native_df_qs = self.app.get_native_df_qs()
         for df in native_df_qs:
             try:
-                logger.debug(f"Creating df readings for df {df.pk} {df.name}")
                 self.create_df_readings_for_ind_df(df)
-            except Exception as e:
-                logger.error(f"Error while creating dfrs for df {df.pk} {df.name}, {e}")
+            except Exception:
+                logger.error(f"Error while creating readings for df {df.pk} {df.name}, {traceback.format_exc(-1)}")
 
     @transaction.atomic
     def create_df_readings_for_ind_df(self, nat_df: Datafeed) -> None:
@@ -66,14 +67,17 @@ class NewDfrCreator:
                     :num_dsrs_to_process
                 ]
             )
-            # no reason to proceed
-            if len(ds_readings) == 0 and not nat_df.is_aug_on and nat_df.aug_policy != AugmentationPolicy.TILL_NOW:
-                rts_to_start_with_next_time = start_rts
-                break
 
-            last_dfr_rts, rts_to_start_with_next_time, last_saved_dfr_rts = create_df_readings(
+            df_readings, last_dfr_rts, rts_to_start_with_next_time = create_df_readings(
                 ds_readings, nat_df, start_rts
             )
+
+            last_saved_dfr_rts = None
+            if len(df_readings) > 0:
+                logger.debug(f"Saving {len(df_readings)} readings for df {nat_df.pk} '{nat_df.name}'")
+                DfReading.objects.bulk_create(df_readings)
+                last_saved_dfr_rts = df_readings[-1].time
+                logger.debug(f"Last saved dfr rts: {last_saved_dfr_rts}")
 
             if (
                 # no new df readins were created
