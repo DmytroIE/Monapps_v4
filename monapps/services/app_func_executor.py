@@ -3,6 +3,7 @@ import traceback
 from collections.abc import Iterable
 from typing import Literal
 from django.db import transaction, IntegrityError
+from django.conf import settings
 from django_celery_beat.models import PeriodicTask
 
 from apps.applications.models import Application
@@ -54,6 +55,18 @@ class AppFuncExecutor:
         native_df_map = {df.name: df for df in native_df_qs}
         derived_df_qs = self.app.get_derived_df_qs().select_for_update()
         derived_df_map = {df.name: df for df in derived_df_qs}
+
+        min_ts = self.find_min_dfr_ts(derived_df_qs)
+        if min_ts == settings.MAX_TS_MS:
+            logger.debug("No df readings to process, return...")
+            return
+        
+        # protection from forgetting to set proper value for app.cursor_ts
+        if self.app.cursor_ts < min_ts:
+            logger.debug(f"Cursor ts {self.app.cursor_ts} is < min_ts {min_ts}")
+            self.app.cursor_ts = min_ts
+            logger.debug(f"Cursor ts upgraded")
+
         self.task = PeriodicTask.objects.select_for_update().get(pk=self.task.pk)
 
         derived_df_readings, self.update_map = self.app_func(self.app, native_df_map, derived_df_map)
@@ -74,6 +87,17 @@ class AppFuncExecutor:
         self.update_cursor_pos()
         self.update_alarms()
         self.update_state()
+    
+    def find_min_dfr_ts(self, native_df_qs) -> int:
+        # protection from forgetting to set proper value for app.cursor_ts
+        min_ts = settings.MAX_TS_MS
+        for df in native_df_qs:
+            first_dfr = DfReading.objects.filter(datafeed__id=df.pk).order_by("time").first()
+            if first_dfr is None:
+                continue
+            if first_dfr.time < min_ts:
+                min_ts = first_dfr.time
+        return min_ts
 
     def save_new_df_readings(self, new_df_readings):
         latest_dfr = find_instance_with_max_attr(new_df_readings)
@@ -168,7 +192,7 @@ class AppFuncExecutor:
             return
 
         full_name = CURR_STATE_FIELD_NAME if name == "curr_state" else STATUS_FIELD_NAME
-        has = filter(lambda df: df.name == full_name, self.app.datafeeds)
+        has = filter(lambda df: df.name == full_name, self.app.datafeeds.all())
         if not has:
             return
         last_update_ts = getattr(self.app, f"last_{name}_update_ts")

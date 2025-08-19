@@ -69,6 +69,9 @@ class DeviceUpdater:
 
         logger.debug(f" - device {dev.pk} {dev.name} health changed -> {health}")
 
+        if parent is None:
+            return
+
         update_reeval_fields(parent, "health")
         logger.debug(f" - parent's health (asset {parent.pk} {parent.name}) to be reevaluated")
         enqueue_update(parent, now_ts)

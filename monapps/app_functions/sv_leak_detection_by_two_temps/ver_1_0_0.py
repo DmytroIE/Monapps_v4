@@ -18,7 +18,7 @@ from app_functions.helpers.automatas.status_automata_type1 import StatusAutomata
 logger = logging.getLogger("#sv_leak_det_1_0_0")
 
 
-TEMP_DIFF_ERROR_THRESHOLD = 0.5
+TEMP_DIFF_ERROR_THRESHOLD = 0.1
 
 
 def function(
@@ -223,8 +223,8 @@ def function(
 
 
 df_schema = {
-    "Temp input": {"derived": False, "data_type": "Temperature"},
-    "Temp output": {"derived": False, "data_type": "Temperature"},
+    "Temp in": {"derived": False, "data_type": "Temperature"},
+    "Temp out": {"derived": False, "data_type": "Temperature"},
     CURR_STATE_FIELD_NAME: {"derived": True, "data_type": CURR_STATE_FIELD_NAME},
     STATUS_FIELD_NAME: {"derived": True, "data_type": STATUS_FIELD_NAME},
 }
