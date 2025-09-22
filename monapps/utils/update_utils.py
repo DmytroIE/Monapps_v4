@@ -79,7 +79,7 @@ def derive_status_from_children(
             ):
                 continue
             else:
-                if obj.status > status_assumption:  # UNDEFINED and stale statuses are not used here
+                if obj.status > status_assumption:
                     if obj.status == StatusTypes.ERROR:
                         if (obj.status_use == StatusUse.AS_WARNING) or (
                             obj.status_use == StatusUse.AS_ERROR_IF_ALL and not all_have_error_status
@@ -136,7 +136,7 @@ def derive_curr_state_from_children(
             ):
                 continue
             else:
-                if obj.curr_state > curr_state_assumption:  # UNDEFINED and stale current states are not used here
+                if obj.curr_state > curr_state_assumption:
                     if obj.curr_state == CurrStateTypes.ERROR:
                         if obj.curr_state_use == CurrStateUse.AS_WARNING or (
                             obj.curr_state_use == CurrStateUse.AS_ERROR_IF_ALL and not all_have_error_curr_state
