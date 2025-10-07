@@ -37,8 +37,8 @@ sub_topic = os.getenv("MQTT_SUB_TOPIC")  # in order not to create a publisher in
 mqtt_publisher = None
 
 if proc_name is None:
-    add_to_alarm_log("ERROR", "No PROC_NAME set, no MQTT publisher created", instance="MQTT Pub")
-    logger.error("No PROC_NAME set, no MQTT publisher created")
+    add_to_alarm_log("INFO", "No PROC_NAME set, no MQTT publisher created", instance="MQTT Pub")
+    logger.info("No PROC_NAME set, no MQTT publisher created")
 elif sub_topic is not None:
     add_to_alarm_log("INFO", "It is a subscriber process, no MQTT publisher created", instance="MQTT Pub")
     logger.info("It is a subscriber process, no MQTT publisher created")
