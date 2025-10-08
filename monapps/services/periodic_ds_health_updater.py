@@ -67,8 +67,7 @@ class PeriodicDsHealthUpdater:
                 nd_health = HealthGrades.ERROR
             else:
                 nd_health = HealthGrades.OK
-        if not set_attr_if_cond(nd_health, "!=", ds, "nd_health"):
-            return
+        set_attr_if_cond(nd_health, "!=", ds, "nd_health")
 
         health = max(ds.msg_health, ds.nd_health)
         if not set_attr_if_cond(health, "!=", ds, "health"):

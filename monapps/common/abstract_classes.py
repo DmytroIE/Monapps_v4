@@ -8,6 +8,7 @@ from django.conf import settings
 from common.constants import reeval_fields
 from utils.db_field_utils import get_parent_full_id, get_instance_full_id
 from utils.ts_utils import create_dt_from_ts_ms, create_now_ts_ms
+
 # from services.alarm_log import add_to_alarm_log
 from utils.update_utils import enqueue_update, update_reeval_fields
 from services.mqtt_publisher import mqtt_publisher
@@ -37,8 +38,8 @@ class PublishingOnSaveModel(models.Model):
     # TODO: overload the 'delete' method as well
 
     def save(self, **kwargs):
-        super().save(**kwargs)
         logger.debug(f"<{get_instance_full_id(self)}>: Saving")
+        super().save(**kwargs)
         # 'update_fields' is used to collect the names of the fields that were changed.
         # It will then be used in the 'save' method and reset.
         # To align with the Django 'save' method signature, this field should be
@@ -52,46 +53,52 @@ class PublishingOnSaveModel(models.Model):
         # In this case, it is responsibility of the caller to enqueue the update of the parent.
         # If 'update_fields' is 'None', it most likely that the instance was saved
         # in the admin console. In this case, the parent update with all reeval fields
-        # will be enqueued here. Therefore, don't save the paren in the code without
+        # will be enqueued here. Therefore, don't save instances without
         # explicit 'update_fields' parameter.
         update_fields = kwargs.get("update_fields")
         logger.debug(f"<{get_instance_full_id(self)}>: update_fields: {update_fields}")
+        update_fields_length = 0
+        try:
+            if update_fields is not None:
+                update_fields_length = len(update_fields)
+            else:
+                update_fields_length = -1  # anything but not 0
+        except Exception:
+            pass
+        if update_fields is not None and update_fields_length == 0:
+            return
 
-        if update_fields is None or len(update_fields) > 0:
-            self.publish_on_mqtt(update_fields)
-        if update_fields is None:
+        if update_fields is not None:
+            fields_to_publish = self.published_fields.intersection(update_fields)
+            if len(fields_to_publish) > 0:
+                self.publish_on_mqtt(fields_to_publish)
+        else:
+            self.publish_on_mqtt(set())
             self.update_parent_at_bulk_save()
 
         # reset after all the processing
         self.update_fields = set()
 
-    def publish_on_mqtt(self, update_fields):
+    def publish_on_mqtt(self, fields_to_publish: set):
         if mqtt_publisher is None or not mqtt_publisher.is_connected():
             return
 
-        # check if at least one of 'update_fields' is in list of fields to publish
-        if update_fields is not None and len(self.published_fields.intersection(update_fields)) == 0:
-            return
+        mqtt_pub_dict = self.create_mqtt_pub_dict(fields_to_publish)
 
-        mqtt_pub_dict = self.create_mqtt_pub_dict()
-
-        topic = f"procdata/{settings.MONAPP_INSTANCE_ID}/{self._meta.model_name}/{self.pk}"
+        topic = (
+            f"procdata/{settings.MONAPP_INSTANCE_ID}/{self._meta.model_name}/{self.pk}"
+        )
         payload_str = json.dumps(mqtt_pub_dict)
-        mqtt_publisher.publish(topic, payload_str, qos=0, retain=True)
+        mqtt_publisher.publish(topic, payload_str, qos=0)
         # add_to_alarm_log("INFO", "Changes published", instance=self)
         logger.info(f"<{get_instance_full_id(self)}>: Changes published on MQTT")
 
-    def create_mqtt_pub_dict(self) -> dict:
+    def create_mqtt_pub_dict(self, fields_to_publish: set) -> dict:
         mqtt_pub_dict = {}
         mqtt_pub_dict["id"] = get_instance_full_id(self)
-        mqtt_pub_dict["name"] = self.name
-        mqtt_pub_dict["parentId"] = get_parent_full_id(self)
 
-        for field in self.published_fields:
-            attr = getattr(self, field, "NO_ATTR")
-            if attr == "NO_ATTR":
-                logger.warning(f"<{get_instance_full_id(self)}>: No attribute {field} to publish")
-                continue
+        for field in fields_to_publish:
+            attr = getattr(self, field, None)
             camelized_field = humps.camelize(field)
             mqtt_pub_dict[camelized_field] = attr
 
@@ -100,14 +107,19 @@ class PublishingOnSaveModel(models.Model):
     def update_parent_at_bulk_save(self):
         if self.parent is None:
             return
-
-        logger.debug(f"<{get_instance_full_id(self)}>: Updating parent from the bulk 'save' method")
-        if hasattr(self.parent, "reeval_fields"):
+        logger.debug(
+            f"<{get_instance_full_id(self)}>: Updating parent from the bulk 'save' method"
+        )
+        if hasattr(self.parent, "reeval_fields"):  # if it is an asset, all 'reeval_fields' should be reevaluated
             update_reeval_fields(self.parent, reeval_fields)
-            logger.debug(f"<{get_instance_full_id(self)}>: To be reevaluated: {reeval_fields}")
+            logger.debug(
+                f"<{get_instance_full_id(self)}>: To be reevaluated: {reeval_fields}"
+            )
         if hasattr(self.parent, "next_upd_ts"):
             enqueue_update(self.parent, create_now_ts_ms(), coef=0.2)
-            logger.debug(f"<{get_instance_full_id(self)}>: Update enqueued for {self.parent.next_upd_ts}")
+            logger.debug(
+                f"<{get_instance_full_id(self)}>: Update enqueued for {self.parent.next_upd_ts}"
+            )
         self.parent.save(update_fields=self.parent.update_fields)
 
 

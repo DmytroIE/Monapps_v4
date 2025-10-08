@@ -10,13 +10,16 @@ LOGGING = {
             "level": "DEBUG",
             "class": "logging.StreamHandler",
             "formatter": "simple",
-            "filters": ["OnlyLocalModulesFilter"],
+            "filters": ["OnlyLocalModulesFilter", "VerboseModulesFilter"],
         },
     },
     "filters": {
         "OnlyLocalModulesFilter": {
             "()": "utils.log_filters.OnlyLocalModulesFilter",
         },
+        "VerboseModulesFilter": {
+            "()": "utils.log_filters.VerboseModulesFilter",
+        }
     },
     "formatters": {
         "simple": {"format": "|%(levelname)s|\t|%(asctime)s|\t|%(module)s|\t'%(message)s'"},
