@@ -1,6 +1,7 @@
 import logging
 import json
 import humps
+from typing import Literal
 
 from django.db import models
 from django.conf import settings
@@ -39,6 +40,7 @@ class PublishingOnSaveModel(models.Model):
 
     def save(self, **kwargs):
         logger.debug(f"<{get_instance_full_id(self)}>: Saving")
+        message_type = "c" if self.pk is None else "u"
         super().save(**kwargs)
         # 'update_fields' is used to collect the names of the fields that were changed.
         # It will then be used in the 'save' method and reset.
@@ -71,19 +73,19 @@ class PublishingOnSaveModel(models.Model):
         if update_fields is not None:
             fields_to_publish = self.published_fields.intersection(update_fields)
             if len(fields_to_publish) > 0:
-                self.publish_on_mqtt(fields_to_publish)
+                self.publish_on_mqtt(fields_to_publish, message_type)
         else:
-            self.publish_on_mqtt(set())
-            self.update_parent_at_bulk_save()
+            self.publish_on_mqtt(set(), message_type)
+            self.total_parent_update()
 
         # reset after all the processing
         self.update_fields = set()
 
-    def publish_on_mqtt(self, fields_to_publish: set):
+    def publish_on_mqtt(self, fields_to_publish: set, message_type: Literal["c", "u", "d"]):
         if mqtt_publisher is None or not mqtt_publisher.is_connected():
             return
 
-        mqtt_pub_dict = self.create_mqtt_pub_dict(fields_to_publish)
+        mqtt_pub_dict = self.create_mqtt_pub_dict(fields_to_publish, message_type)
 
         topic = (
             f"procdata/{settings.MONAPP_INSTANCE_ID}/{self._meta.model_name}/{self.pk}"
@@ -93,9 +95,17 @@ class PublishingOnSaveModel(models.Model):
         # add_to_alarm_log("INFO", "Changes published", instance=self)
         logger.info(f"<{get_instance_full_id(self)}>: Changes published on MQTT")
 
-    def create_mqtt_pub_dict(self, fields_to_publish: set) -> dict:
+    def delete(self,  using=None, keep_parents=False):
+        # when delete an instance, the parent update with all reeval fields
+        # will be enqueued here
+        self.publish_on_mqtt(set(), "d")
+        self.total_parent_update()
+        return super().delete(using, keep_parents)
+
+    def create_mqtt_pub_dict(self, fields_to_publish: set, message_type: Literal["c", "u", "d"]) -> dict:
         mqtt_pub_dict = {}
         mqtt_pub_dict["id"] = get_instance_full_id(self)
+        mqtt_pub_dict["messageType"] = message_type
 
         for field in fields_to_publish:
             attr = getattr(self, field, None)
@@ -104,7 +114,7 @@ class PublishingOnSaveModel(models.Model):
 
         return mqtt_pub_dict
 
-    def update_parent_at_bulk_save(self):
+    def total_parent_update(self):
         if self.parent is None:
             return
         logger.debug(
