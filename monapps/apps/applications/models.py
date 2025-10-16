@@ -60,7 +60,7 @@ class Application(PublishingOnSaveModel):
     errors = models.JSONField(default=dict, blank=True)
     warnings = models.JSONField(default=dict, blank=True)
 
-    cursor_ts = models.BigIntegerField(default=0)
+    cursor_ts = models.BigIntegerField()
     is_enabled = models.BooleanField(default=False)
 
     invoc_interval = models.ForeignKey(

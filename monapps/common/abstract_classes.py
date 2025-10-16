@@ -95,12 +95,30 @@ class PublishingOnSaveModel(models.Model):
         # add_to_alarm_log("INFO", "Changes published", instance=self)
         logger.info(f"<{get_instance_full_id(self)}>: Changes published on MQTT")
 
-    def delete(self,  using=None, keep_parents=False):
+    def delete(self, using=None, keep_parents=False):
+
         # when delete an instance, the parent update with all reeval fields
         # will be enqueued here
+        children_with_cascade_delete = []
+        for relation in self._meta.related_objects:
+            if relation.on_delete.__name__ == "CASCADE":
+                related_model = relation.related_model
+                children_with_cascade_delete += list(related_model.objects.filter(parent=self))
+
+        id = self.id
+        del_result = super().delete(using, keep_parents)
+        self.id = id
         self.publish_on_mqtt(set(), "d")
         self.total_parent_update()
-        return super().delete(using, keep_parents)
+
+        if self._meta.label not in del_result[1] or del_result[1][self._meta.label] == 0:  # no rows deleted
+            return del_result
+
+        for child in children_with_cascade_delete:
+            if hasattr(child, "publish_on_mqtt"):
+                child.publish_on_mqtt(set(), "d")
+
+        return del_result
 
     def create_mqtt_pub_dict(self, fields_to_publish: set, message_type: Literal["c", "u", "d"]) -> dict:
         mqtt_pub_dict = {}
